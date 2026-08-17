@@ -27,20 +27,6 @@ class OrderRepository(BaseRepository[Order]):
         )
         return result.scalars().all()
 
-    async def get_by_user_in_date_range(
-        self, db: AsyncSession, user_id: int, start: datetime, end: datetime
-    ) -> List[Order]:
-        """查询用户在指定时间范围内的订单（含边界）。"""
-        result = await db.execute(
-            select(Order)
-            .where(Order.user_id == user_id)
-            .where(Order.created_at >= start)
-            .where(Order.created_at <= end)
-            .order_by(desc(Order.created_at))
-            .options(selectinload(Order.items).selectinload(OrderItem.menu_item))
-        )
-        return result.scalars().all()
-
     async def count_by_user(self, db: AsyncSession, user_id: int) -> int:
         result = await db.execute(select(func.count(Order.id)).where(Order.user_id == user_id))
         return result.scalar() or 0

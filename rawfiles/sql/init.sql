@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `birth_date` DATE DEFAULT NULL COMMENT '出生日期',
     `need_change_password` TINYINT(1) DEFAULT 0 COMMENT '是否需要强制修改密码',
     `face_encoding` JSON DEFAULT NULL COMMENT '人脸特征向量（128维）',
-    `face_image_url` VARCHAR(255) DEFAULT NULL COMMENT '人脸头像存储路径',
+    `face_image_url` VARCHAR(255) DEFAULT NULL COMMENT '人脸照片URL',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS `menu_items` (
     `name` VARCHAR(100) NOT NULL COMMENT '菜品名称',
     `description` TEXT COMMENT '菜品描述',
     `price` FLOAT NOT NULL COMMENT '价格（元）',
-    `spicy_level` INT DEFAULT 0 COMMENT '辣度 0-5',
+    `spicy_level` INT DEFAULT 0 COMMENT '辣度 0-3',
     `category` VARCHAR(50) NOT NULL COMMENT '分类名称',
     `tags` VARCHAR(300) COMMENT '标签，逗号分隔',
     `stock` INT DEFAULT 100 COMMENT '库存数量',
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS `order_items` (
 
 -- 管理员账号
 INSERT IGNORE INTO `users` (`username`, `password`, `role`, `phone`, `gender`, `birth_date`, `need_change_password`) VALUES
-    ('root', '$2b$12$FGxrND9MFrJu.hxKUxJvG.fz5fvtd0AL1wbI1KEoqRw.D3Lq/Poky', 'admin', '13800138000', NULL, NULL, 1);
+    ('root', '$2b$12$fkZCE7zgWfpcQ5I2gJjgceTujP086R9VLDE6Ic5.5orr8lpcmia3C', 'admin', '13800138000', NULL, NULL, 1);
 
 -- 菜单分类
 INSERT IGNORE INTO `menu_categories` (`name`, `sort_order`, `description`) VALUES

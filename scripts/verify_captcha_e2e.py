@@ -2,12 +2,16 @@ import base64
 import json
 import re
 import urllib.request
+from pathlib import Path
+
 import redis
 import sys
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 base = 'http://127.0.0.1:8001'
+# 验证码图片保存路径（脚本所在目录）
+CAPTCHA_IMAGE_PATH = Path(__file__).resolve().parent / 'captcha_sample.png'
 
 
 def request_json(url, data=None, headers=None):
@@ -35,10 +39,8 @@ def main():
     match = re.match(r'data:image/png;base64,(.+)', image_base64)
     if match:
         img_bytes = base64.b64decode(match.group(1))
-        img_path = 'd:/code/multimodal-smart-restaurant/scripts/captcha_sample.png'
-        with open(img_path, 'wb') as f:
-            f.write(img_bytes)
-        print(f'验证码图片已保存: {img_path}')
+        CAPTCHA_IMAGE_PATH.write_bytes(img_bytes)
+        print(f'验证码图片已保存: {CAPTCHA_IMAGE_PATH}')
 
     # 3. 从 Redis 读取正确答案
     r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)

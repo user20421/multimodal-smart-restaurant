@@ -1,6 +1,5 @@
 """
 菜单路由
-保持与原后端API格式兼容
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession

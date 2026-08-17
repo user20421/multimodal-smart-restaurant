@@ -68,10 +68,6 @@ def compare_face_distance(known_encoding: np.ndarray, unknown_encoding: np.ndarr
     return float(np.linalg.norm(known - unknown))
 
 
-def is_same_face(known_encoding: np.ndarray, unknown_encoding: np.ndarray, tolerance: float = FACE_TOLERANCE) -> bool:
-    return compare_face_distance(known_encoding, unknown_encoding) <= tolerance
-
-
 def save_face_image(base64_str: str, username: str) -> str:
     """保存人脸照片到 static/faces/{username}_{uuid}.jpg，返回相对路径。"""
     if "," in base64_str:

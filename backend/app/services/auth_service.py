@@ -18,6 +18,9 @@ from app.services.face_service import (
     find_best_face_match,
     encoding_from_list,
 )
+from app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 # 生产模式默认管理员账号配置
@@ -93,7 +96,7 @@ async def login_user(db: AsyncSession, data: UserLogin) -> UserOut:
     if user.username == DEFAULT_ADMIN_USERNAME and user.role != "admin":
         user.role = "admin"
         await db.commit()
-        print("[Auth] 登录时修复默认管理员角色为 admin")
+        logger.info("[Auth] 登录时修复默认管理员角色为 admin")
 
     # 如果是默认管理员凭据登录，标记需要强制修改密码
     if _is_default_admin_credentials(data.username, data.password):
@@ -121,7 +124,7 @@ async def init_admin_user(db: AsyncSession):
         if old_admin:
             await user_repo.delete(db, old_admin.id)
             changed = True
-            print(f"[Init] 已清理旧管理员账号 '{old_name}'，统一使用 '{DEFAULT_ADMIN_USERNAME}'")
+            logger.info(f"[Init] 已清理旧管理员账号 '{old_name}'，统一使用 '{DEFAULT_ADMIN_USERNAME}'")
 
     # 确保默认管理员账号存在
     existing = await user_repo.get_by_username(db, DEFAULT_ADMIN_USERNAME)
@@ -135,12 +138,12 @@ async def init_admin_user(db: AsyncSession):
             "need_change_password": True,
         })
         changed = True
-        print(f"[Init] 默认管理员账号 {DEFAULT_ADMIN_USERNAME}/{DEFAULT_ADMIN_PASSWORD} 已创建，首次登录后请修改密码")
+        logger.info(f"[Init] 默认管理员账号 {DEFAULT_ADMIN_USERNAME}/{DEFAULT_ADMIN_PASSWORD} 已创建，首次登录后请修改密码")
     elif existing.role != "admin":
         existing.role = "admin"
         await db.flush()
         changed = True
-        print("[Init] 已修复默认管理员账号角色为 admin")
+        logger.info("[Init] 已修复默认管理员账号角色为 admin")
 
     if changed:
         await db.commit()
@@ -223,7 +226,7 @@ async def face_login_user(db: AsyncSession, data: FaceLoginRequest) -> tuple[Use
     if not user:
         raise BusinessException("人脸识别失败，请通过密码登录")
 
-    print(f"[FaceLogin] 匹配用户 {user.username}，距离={distance:.4f}")
+    logger.info(f"[FaceLogin] 匹配用户 {user.username}，距离={distance:.4f}")
     return UserOut.model_validate(user), distance
 
 

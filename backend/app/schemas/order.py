@@ -42,14 +42,6 @@ class OrderOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class OrderExport(BaseModel):
-    id: int
-    status: str
-    total_price: float
-    created_at: datetime
-    item_summary: str
-
-
 class PaginatedOrdersResponse(BaseModel):
     items: List[OrderOut]
     total: int

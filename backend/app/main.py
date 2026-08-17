@@ -8,10 +8,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
 from app.core.exceptions import AppException
-
 from app.core.database import init_db, AsyncSessionLocal
 from app.core.logging_config import setup_logging, get_logger
 from app.core.config import settings
@@ -36,7 +35,6 @@ async def lifespan(app: FastAPI):
 
     # JWT 密钥安全检查
     if settings.jwt_secret_key in ("your-secret-key-change-in-production", ""):
-        print("[安全警告] JWT_SECRET_KEY 使用的是默认弱密钥，生产环境请务必修改！")
         logger.warning("JWT_SECRET_KEY 使用的是默认弱密钥，生产环境请务必修改")
 
     # 创建数据库表
@@ -52,9 +50,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="美味餐厅",
+    title=settings.app_name,
     description="基于 FastAPI 的美味餐厅点餐系统",
-    version="3.0.0",
+    version=settings.version,
     lifespan=lifespan,
 )
 
@@ -68,12 +66,12 @@ async def app_exception_handler(request: Request, exc: AppException):
         content={"detail": exc.message},
     )
 
-# CORS 配置：开发模式允许所有来源但不允许携带凭证，生产模式从环境变量读取
-is_prod = os.environ.get("SERVE_STATIC", "false").lower() == "true"
+# CORS 配置：开发模式允许所有来源但不允许携带凭证，生产模式从配置读取
+is_prod = settings.serve_static
 if is_prod:
     # 生产环境建议配置具体域名
-    cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
-    allow_creds = os.environ.get("CORS_ALLOW_CREDENTIALS", "false").lower() == "true"
+    cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    allow_creds = settings.cors_allow_credentials
 else:
     cors_origins = ["*"]
     allow_creds = False
@@ -97,7 +95,7 @@ app.include_router(system.router, prefix="/api/v1", tags=["系统"])
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "app": "美味餐厅"}
+    return {"status": "ok", "app": settings.app_name}
 
 
 # 挂载应用静态资源目录（人脸头像等）
@@ -107,15 +105,15 @@ app.mount("/static", StaticFiles(directory=static_files_dir), name="static")
 
 # 生产模式：托管前端静态文件（必须在 API 路由之后挂载，保证 API 优先）
 if is_prod:
-    static_dir = os.environ.get("STATIC_DIR", "../frontend/dist")
-    if os.path.isdir(static_dir):
+    dist_dir = settings.frontend_dist_dir
+    if os.path.isdir(dist_dir):
         # 挂载静态文件目录；html=True 表示对于不存在的路径自动返回 index.html
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
-        print(f"[生产模式] 已挂载静态文件目录: {static_dir}")
+        app.mount("/", StaticFiles(directory=dist_dir, html=True), name="frontend")
+        logger.info(f"[生产模式] 已挂载前端静态文件目录: {dist_dir}")
     else:
-        print(f"[警告] 生产模式静态文件目录不存在: {static_dir}")
+        logger.warning(f"[生产模式] 前端静态文件目录不存在: {dist_dir}")
 else:
     @app.get("/")
     async def root():
         """开发模式 API 根路径信息"""
-        return {"message": "欢迎使用美味餐厅 API", "docs": "/docs", "version": "3.0.0"}
+        return {"message": "欢迎使用美味餐厅 API", "docs": "/docs", "version": settings.version}

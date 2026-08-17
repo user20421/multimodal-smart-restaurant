@@ -1,6 +1,5 @@
 """
 订单路由
-保持与原后端API格式兼容
 """
 import io
 from fastapi import APIRouter, Depends, HTTPException
@@ -44,9 +43,7 @@ async def list_orders(
     db: AsyncSession = Depends(get_db),
 ):
     """获取用户订单列表（分页）"""
-    page = max(1, page)
-    page_size = max(1, min(page_size, 100))
-    orders, total = await get_user_orders_paginated(db, current_user["id"], page, page_size)
+    orders, total, page, page_size = await get_user_orders_paginated(db, current_user["id"], page, page_size)
     return {
         "items": orders,
         "total": total,
@@ -112,7 +109,7 @@ async def export_all_orders(
     db: AsyncSession = Depends(get_db),
 ):
     """导出所有订单为 PDF"""
-    orders, _ = await get_user_orders_paginated(db, current_user["id"], page=1, page_size=1000)
+    orders, _, _, _ = await get_user_orders_paginated(db, current_user["id"], page=1, page_size=1000)
     pdf_bytes = build_orders_pdf(
         [o.model_dump() for o in orders],
         title="我的订单列表",

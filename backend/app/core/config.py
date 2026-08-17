@@ -26,8 +26,16 @@ class Settings(BaseSettings):
     # 日志配置
     log_level: str = "INFO"
 
-    # 静态资源目录
+    # 静态资源目录（人脸照片等，相对于 backend/ 目录）
     static_dir: str = "static"
+
+    # 生产模式：托管前端静态文件
+    serve_static: bool = False
+    frontend_dist_dir: str = "../frontend/dist"
+
+    # CORS 配置（仅生产模式生效；开发模式放行全部来源）
+    cors_origins: str = "*"
+    cors_allow_credentials: bool = False
 
     model_config = {
         "env_file": ".env",

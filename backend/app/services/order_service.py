@@ -1,18 +1,15 @@
 """
 订单服务
-负责订单创建、查询、格式化输出等业务逻辑，并统一控制数据库事务。
+负责订单创建、查询等业务逻辑，并统一控制数据库事务。
 """
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from typing import List, Optional, Dict, Any, Tuple
 
 from app.repositories.order_repo import order_repo, order_item_repo
 from app.repositories.menu_repo import menu_item_repo
-from app.schemas.order import OrderCreate, OrderOut, CartItem, OrderItemOut
+from app.schemas.order import OrderOut, CartItem, OrderItemOut
 from app.core.exceptions import BusinessException, NotFoundException
 from app.core.logging_config import get_logger
-from app.utils.formatters import order_status_text
-from app.models.menu import MenuItem
 from app.models.order import Order
 
 logger = get_logger(__name__)
@@ -20,7 +17,7 @@ logger = get_logger(__name__)
 
 async def _resolve_cart_items(db: AsyncSession, cart: List[Dict[str, Any]]) -> Tuple[List[CartItem], List[str]]:
     """
-    将前端/Agent 传来的购物车条目解析为结构化的 CartItem。
+    将前端传来的购物车条目解析为结构化的 CartItem。
     如果缺少 menu_item_id，会按名称精确或模糊匹配菜单数据补充。
     无法识别的菜品会被跳过（并记录日志）。
     """
@@ -136,7 +133,7 @@ async def create_order(db: AsyncSession, user_id: int, items: List[CartItem], re
 
 async def create_order_from_cart(db: AsyncSession, user_id: int, cart: List[Dict[str, Any]]) -> str:
     """
-    供 Agent 调用的便捷方法：根据购物车创建订单并返回可读的文本结果。
+    供聊天接口调用的便捷方法：根据购物车创建订单并返回可读的文本结果。
     注意：本函数不会修改传入的 cart，调用方需自行清空购物车。
     """
     if not cart:
@@ -154,46 +151,24 @@ async def create_order_from_cart(db: AsyncSession, user_id: int, cart: List[Dict
             msg += f"（以下菜品无法识别已跳过：{', '.join(set(skipped_names))}）"
         return msg
     except Exception as e:
-        logger.error(f"[OrderService] Agent 下单失败: {e}")
+        logger.error(f"[OrderService] 聊天下单失败: {e}")
         return f"下单失败：{str(e)}，请稍后重试或联系服务员。"
 
 
-async def cancel_order(db: AsyncSession, order_id: int, user_id: Optional[int] = None) -> bool:
-    """
-    取消指定订单。
-    仅允许取消状态为 confirmed 的订单；若提供 user_id，则同时校验订单归属。
-    事务由调用方控制，本函数不自行 commit。
-    """
-    order = await order_repo.get_with_items(db, order_id)
-    if not order:
-        raise NotFoundException(f"订单 #{order_id} 不存在")
-
-    if user_id is not None and order.user_id != user_id:
-        raise BusinessException("无权取消该订单")
-
-    if order.status != "confirmed":
-        raise BusinessException(f"订单 #{order_id} 当前状态为 {order.status}，无法取消")
-
-    await order_repo.update_status(db, order_id, "cancelled")
-    return True
-
-
-async def get_user_orders(db: AsyncSession, user_id: int, limit: int = 20) -> List[OrderOut]:
-    """获取用户订单"""
-    orders = await order_repo.get_by_user(db, user_id, limit)
-    return [_format_order(o) for o in orders]
+def _clamp_pagination(page: int, page_size: int) -> Tuple[int, int]:
+    """统一分页参数钳制：page >= 1，1 <= page_size <= 100。"""
+    return max(1, page), max(1, min(page_size, 100))
 
 
 async def get_user_orders_paginated(
     db: AsyncSession, user_id: int, page: int = 1, page_size: int = 10
-) -> tuple[List[OrderOut], int]:
-    """分页获取用户订单，返回 (订单列表, 总数)。"""
-    page = max(1, page)
-    page_size = max(1, min(page_size, 100))
+) -> Tuple[List[OrderOut], int, int, int]:
+    """分页获取用户订单，返回 (订单列表, 总数, 钳制后的页码, 钳制后的每页数量)。"""
+    page, page_size = _clamp_pagination(page, page_size)
     skip = (page - 1) * page_size
     orders = await order_repo.get_by_user(db, user_id, limit=page_size, offset=skip)
     total = await order_repo.count_by_user(db, user_id)
-    return [_format_order(o) for o in orders], total
+    return [_format_order(o) for o in orders], total, page, page_size
 
 
 async def count_user_orders(db: AsyncSession, user_id: int) -> int:
@@ -208,22 +183,15 @@ async def get_order_detail(db: AsyncSession, order_id: int) -> Optional[OrderOut
     return _format_order(order)
 
 
-async def get_all_orders(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[OrderOut]:
-    """获取所有订单（商家）"""
-    orders = await order_repo.get_all_orders(db, skip, limit)
-    return [_format_order(o) for o in orders]
-
-
 async def get_all_orders_paginated(
     db: AsyncSession, page: int = 1, page_size: int = 10
-) -> tuple[List[OrderOut], int]:
-    """分页获取所有订单（商家），返回 (订单列表, 总数)。"""
-    page = max(1, page)
-    page_size = max(1, min(page_size, 100))
+) -> Tuple[List[OrderOut], int, int, int]:
+    """分页获取所有订单（商家），返回 (订单列表, 总数, 钳制后的页码, 钳制后的每页数量)。"""
+    page, page_size = _clamp_pagination(page, page_size)
     skip = (page - 1) * page_size
     orders = await order_repo.get_all_orders(db, skip, page_size)
     total = await order_repo.count_all(db)
-    return [_format_order(o) for o in orders], total
+    return [_format_order(o) for o in orders], total, page, page_size
 
 
 async def count_all_orders(db: AsyncSession) -> int:
@@ -249,121 +217,17 @@ async def get_pending_orders(db: AsyncSession, limit: int = 100) -> List[OrderOu
 
 
 async def complete_order(db: AsyncSession, order_id: int) -> Optional[OrderOut]:
-    """
-    商家完成订单制作。
-    1. 更新订单状态为 completed
-    2. 向用户聊天记录推送一条完成通知
-    事务由调用方控制，本函数不自行 commit。
-    """
+    """商家完成订单制作：更新订单状态为 completed 并提交事务。"""
     order = await order_repo.update_status(db, order_id, "completed")
     if not order:
         return None
+
+    await db.commit()
 
     # 重新加载完整订单信息
     order = await order_repo.get_with_items(db, order_id)
 
     return _format_order(order)
-
-
-def _item_name(it) -> str:
-    """兼容 ORM OrderItem（带 menu_item 关联）和 OrderItemOut（直接有 name）。"""
-    if hasattr(it, "menu_item"):
-        return it.menu_item.name if it.menu_item else "未知菜品"
-    return getattr(it, "name", "未知菜品")
-
-
-def format_order_line(order) -> str:
-    """单条订单格式化为文本行（供 Agent/Graph 使用）"""
-    items_str = "，".join([
-        f"{_item_name(it)} x{it.quantity}"
-        for it in order.items
-    ])
-    time_str = order.created_at.strftime("%Y-%m-%d %H:%M") if hasattr(order.created_at, "strftime") else str(order.created_at)
-    return f"订单号：{order.id}，状态：{order_status_text(order.status)}，总价：¥{order.total_price:.2f}，菜品：{items_str}，下单时间：{time_str}"
-
-
-def format_order_list(orders, title: str = "您最近的订单如下：", total: int = 0) -> str:
-    """订单列表格式化（供 Agent/Graph 使用）。
-    仅展示前 5 条，若总数超过 5 条则附上看全部订单的链接。
-    """
-    lines = [title]
-    for idx, o in enumerate(orders[:5], 1):
-        lines.append(f"{idx}. {format_order_line(o)}")
-    if total > 5:
-        lines.append(f"\n共 {total} 条订单，[查看全部订单](/orders)")
-    return "\n".join(lines)
-
-
-async def format_user_orders(db: AsyncSession, user_id: int, limit: int = 5) -> str:
-    """查询用户最近订单并以文本形式返回（供 Agent 使用），最多展示 5 条。"""
-    try:
-        total = await order_repo.count_by_user(db, user_id)
-        orders = await order_repo.get_by_user(db, user_id, limit)
-        if not orders:
-            return "您还没有订单记录。"
-        return format_order_list(orders, title="您最近的订单如下：", total=total)
-    except Exception as e:
-        logger.error(f"[OrderService] 查询用户订单失败: {e}")
-        return f"查询订单失败：{str(e)}"
-
-
-async def get_min_max_orders_in_range(
-    db: AsyncSession, user_id: int, days: int = 15, min_count: int = 1, max_count: int = 1
-) -> str:
-    """
-    查询用户最近 N 天内总价最高/最低的若干笔订单。
-    返回格式化的文本结果，供 Agent 直接展示。
-    """
-    from datetime import datetime, timedelta
-    try:
-        end = datetime.now()
-        start = end - timedelta(days=max(1, days))
-        orders = await order_repo.get_by_user_in_date_range(db, user_id, start, end)
-        if not orders:
-            return f"最近 {days} 天内您没有订单记录。"
-        if len(orders) == 1:
-            return f"最近 {days} 天内您只有一笔订单：\n{format_order_line(orders[0])}"
-
-        min_count = max(1, min_count)
-        max_count = max(1, max_count)
-        sorted_by_price = sorted(orders, key=lambda o: o.total_price)
-        min_orders = sorted_by_price[:min_count]
-        max_orders = sorted_by_price[-max_count:][::-1]
-
-        lines = [f"最近 {days} 天内您共有 {len(orders)} 笔订单。", ""]
-
-        if max_count == 1:
-            lines.append(f"数额最大：{format_order_line(max_orders[0])}")
-        else:
-            lines.append(f"数额最大的 {len(max_orders)} 笔订单：")
-            for idx, o in enumerate(max_orders, 1):
-                lines.append(f"{idx}. {format_order_line(o)}")
-
-        lines.append("")
-
-        if min_count == 1:
-            lines.append(f"数额最小：{format_order_line(min_orders[0])}")
-        else:
-            lines.append(f"数额最小的 {len(min_orders)} 笔订单：")
-            for idx, o in enumerate(min_orders, 1):
-                lines.append(f"{idx}. {format_order_line(o)}")
-
-        return "\n".join(lines)
-    except Exception as e:
-        logger.error(f"[OrderService] 查询最大/最小订单失败: {e}")
-        return f"查询失败：{str(e)}"
-
-
-async def format_order_detail(db: AsyncSession, order_id: int) -> str:
-    """查询订单详情并以文本形式返回（供 Agent 使用）"""
-    try:
-        order = await order_repo.get_with_items(db, order_id)
-        if not order:
-            return f"订单 #{order_id} 不存在。"
-        return f"订单详情：{format_order_line(order)}"
-    except Exception as e:
-        logger.error(f"[OrderService] 查询订单详情失败: {e}")
-        return f"查询订单详情失败：{str(e)}"
 
 
 def _format_order(order) -> OrderOut:

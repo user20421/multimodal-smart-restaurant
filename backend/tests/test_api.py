@@ -91,6 +91,36 @@ def get_captcha_code() -> tuple[str, str]:
     return captcha_id, item[0]
 
 
+def register_user(username: str, password: str = "123456") -> dict:
+    """注册一个测试用户"""
+    r = client.post("/api/v1/auth/register", json={
+        "username": username,
+        "password": password,
+        "gender": "unknown",
+    })
+    assert r.status_code == 200, f"Register failed: {r.text}"
+    return r.json()["user"]
+
+
+def login_and_get_token(username: str, password: str = "123456") -> str:
+    """登录并返回 JWT"""
+    captcha_id, code = get_captcha_code()
+    r = client.post("/api/v1/auth/login", json={
+        "username": username,
+        "password": password,
+        "captcha_id": captcha_id,
+        "captcha_code": code,
+    })
+    assert r.status_code == 200, f"Login failed: {r.text}"
+    token = r.json().get("token")
+    assert token, "登录响应中缺少 token"
+    return token
+
+
+def auth_headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
 class TestAuth:
     def test_register_and_login(self):
         import uuid
@@ -178,32 +208,18 @@ class TestOrders:
     def test_order_flow(self):
         import uuid
         test_uname = f"order_{uuid.uuid4().hex[:8]}"
-        
-        # 注册
-        r = client.post("/api/v1/auth/register", json={
-            "username": test_uname,
-            "password": "123456",
-            "phone": "13800138002",
-            "gender": "unknown"
-        })
-        assert r.status_code == 200
-        
-        # 登录
-        captcha_id, code = get_captcha_code()
-        r = client.post("/api/v1/auth/login", json={
-            "username": test_uname,
-            "password": "123456",
-            "captcha_id": captcha_id,
-            "captcha_code": code,
-        })
-        user_id = r.json()["user"]["id"]
-        
+
+        # 注册并登录，获取 JWT
+        register_user(test_uname)
+        token = login_and_get_token(test_uname)
+        headers = auth_headers(token)
+
         # 获取菜单
         r = client.get("/api/v1/menu")
         items = r.json()
         if not items:
             pytest.skip("No menu items available")
-        
+
         # 创建订单
         cart_items = [{
             "menu_item_id": items[0]["id"],
@@ -211,38 +227,53 @@ class TestOrders:
             "quantity": 2,
             "unit_price": items[0]["price"]
         }]
-        r = client.post("/api/v1/order", json={"items": cart_items},
-            headers={"X-User-ID": str(user_id), "X-User-Role": "customer"})
+        r = client.post("/api/v1/order", json={"items": cart_items}, headers=headers)
         assert r.status_code == 200, f"Order create failed: {r.text}"
         order = r.json()
         assert "id" in order
-        
+
         # 查询订单列表
-        r = client.get("/api/v1/orders", headers={"X-User-ID": str(user_id), "X-User-Role": "customer"})
+        r = client.get("/api/v1/orders", headers=headers)
         assert r.status_code == 200
-        orders = r.json()
-        assert len(orders) >= 1
-        
+        data = r.json()
+        assert "items" in data and "total" in data
+        assert data["total"] >= 1
+
         # 查询订单详情
-        r = client.get(f"/api/v1/order/{order['id']}", headers={"X-User-ID": str(user_id), "X-User-Role": "customer"})
+        r = client.get(f"/api/v1/order/{order['id']}", headers=headers)
         assert r.status_code == 200
+
+    def test_orders_reject_forged_headers(self):
+        """伪造 X-User-ID 头（无 JWT）应被拒绝"""
+        r = client.get("/api/v1/orders", headers={"X-User-ID": "1", "X-User-Role": "admin"})
+        assert r.status_code == 401
 
 
 class TestAdmin:
+    @staticmethod
+    def _admin_headers() -> dict:
+        """以默认管理员 root 登录获取管理员 JWT"""
+        token = login_and_get_token("root", "123456")
+        return auth_headers(token)
+
     def test_admin_menu_list(self):
-        r = client.get("/api/v1/admin/menu", headers={"X-User-ID": "1", "X-User-Role": "admin"})
+        r = client.get("/api/v1/admin/menu", headers=self._admin_headers())
         assert r.status_code == 200
         items = r.json()
         assert isinstance(items, list)
-    
+
     def test_admin_orders_list(self):
-        r = client.get("/api/v1/admin/orders", headers={"X-User-ID": "1", "X-User-Role": "admin"})
+        r = client.get("/api/v1/admin/orders", headers=self._admin_headers())
         assert r.status_code == 200
         data = r.json()
         assert "items" in data
         assert "total" in data
         assert isinstance(data["items"], list)
-    
+
     def test_admin_auth_reject(self):
-        r = client.get("/api/v1/admin/menu", headers={"X-User-ID": "2", "X-User-Role": "customer"})
+        import uuid
+        test_uname = f"cust_{uuid.uuid4().hex[:8]}"
+        register_user(test_uname)
+        token = login_and_get_token(test_uname)
+        r = client.get("/api/v1/admin/menu", headers=auth_headers(token))
         assert r.status_code == 403

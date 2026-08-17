@@ -1,11 +1,8 @@
 [project]
-name = "shuxiangge-bot"
+name = "multimodal-smart-restaurant"
 version = "3.0.0"
 description = "基于 FastAPI 的美味餐厅点餐系统"
 requires-python = ">=3.10"
-
-[tool.setuptools]
-packages = ["app"]
 
 [tool.ruff]
 line-length = 120

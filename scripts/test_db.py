@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
 数据库连通性测试脚本（独立可执行，不依赖项目其他文件）
-测试 Docker 中运行的 MySQL / MongoDB / Redis 服务。
+测试 Docker 中运行的 MySQL / Redis 服务。
 
 MySQL: root / 123456
-MongoDB: 无认证
 Redis: 无认证
 """
 
@@ -23,12 +22,7 @@ MYSQL_CONFIG = {
     "port": 3306,
     "user": "root",
     "password": "123456",
-    "database": "restaurant",
-}
-
-MONGO_CONFIG = {
-    "host": "localhost",
-    "port": 27017,
+    "database": "meiwei_bot",
 }
 
 REDIS_CONFIG = {
@@ -81,47 +75,6 @@ def test_redis() -> bool:
 
     except Exception as e:
         print(_red(f"[FAIL] Redis 连接异常: {e}"))
-        return False
-
-
-def test_mongodb() -> bool:
-    """测试 MongoDB 连接与基本操作。"""
-    print("\n[MongoDB 测试开始]")
-    try:
-        import pymongo
-    except ImportError:
-        print(_red("[FAIL] 缺少依赖: pymongo"))
-        print("       请安装: pip install pymongo")
-        return False
-
-    try:
-        client = pymongo.MongoClient(
-            host=MONGO_CONFIG["host"],
-            port=MONGO_CONFIG["port"],
-            serverSelectionTimeoutMS=TIMEOUT_MS,
-        )
-        client.admin.command("ping")
-        print(_green("[OK] MongoDB 连接成功"))
-
-        db = client["test_db"]
-        collection = db["connectivity_test"]
-
-        collection.delete_many({"source": "test_db"})
-
-        result = collection.insert_one({"source": "test_db", "message": "hello mongodb"})
-        print(_green(f"[OK] 插入文档: _id = {result.inserted_id}"))
-
-        doc = collection.find_one({"source": "test_db"})
-        print(_green(f"[OK] 查询文档: {doc}"))
-
-        collection.delete_many({"source": "test_db"})
-        print(_green("[OK] MongoDB 测试数据已清理"))
-
-        client.close()
-        return True
-
-    except Exception as e:
-        print(_red(f"[FAIL] MongoDB 连接异常: {e}"))
         return False
 
 
@@ -208,7 +161,6 @@ if __name__ == "__main__":
 
     results = {
         "Redis": test_redis(),
-        "MongoDB": test_mongodb(),
         "MySQL": test_mysql(),
     }
 

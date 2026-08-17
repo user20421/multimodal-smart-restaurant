@@ -20,6 +20,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.utils.formatters import order_status_text
+
 # 注册中文字体
 pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
 FONT_NAME = "STSong-Light"
@@ -42,16 +44,6 @@ def _format_datetime(dt: Any) -> str:
     if isinstance(dt, datetime):
         return dt.strftime("%Y-%m-%d %H:%M")
     return str(dt)
-
-
-def _status_text(status: str) -> str:
-    mapping = {
-        "pending": "待确认",
-        "confirmed": "已确认",
-        "completed": "已完成",
-        "cancelled": "已取消",
-    }
-    return mapping.get(status, status)
 
 
 def _items_text(items: List[Dict[str, Any]]) -> str:
@@ -117,7 +109,7 @@ def build_orders_pdf(orders: List[Dict[str, Any]], title: str = "订单列表") 
         for order in orders:
             data.append([
                 Paragraph(str(order.get("id", "")), normal_style),
-                Paragraph(_status_text(order.get("status", "")), normal_style),
+                Paragraph(order_status_text(order.get("status", "")), normal_style),
                 Paragraph(_format_datetime(order.get("created_at")), normal_style),
                 Paragraph(_items_text(order.get("items", [])), normal_style),
                 Paragraph(f"{order.get('total_price', 0):.2f}元", normal_style),

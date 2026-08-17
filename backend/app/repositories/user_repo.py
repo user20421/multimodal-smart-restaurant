@@ -17,9 +17,6 @@ class UserRepository(BaseRepository[User]):
         result = await db.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
 
-    async def get_by_id(self, db: AsyncSession, user_id: int) -> Optional[User]:
-        return await self.get(db, user_id)
-
     async def get_users_with_face(self, db: AsyncSession) -> List[User]:
         result = await db.execute(select(User).where(User.face_encoding.isnot(None)))
         return result.scalars().all()

@@ -157,20 +157,19 @@ multimodal-smart-restaurant/
 ├── backend/                  # FastAPI 后端
 │   ├── app/
 │   │   ├── main.py           # 应用入口
-│   │   ├── core/             # 配置、数据库、日志、异常
+│   │   ├── core/             # 配置、数据库、日志、异常、种子数据
 │   │   ├── models/           # SQLAlchemy ORM 模型
 │   │   ├── schemas/          # Pydantic 数据模型
 │   │   ├── repositories/     # 数据访问层
-│   │   ├── services/         # 业务逻辑层
-│   │   │   ├── auth_service.py
-│   │   │   ├── captcha_service.py
-│   │   │   └── face_service.py
-│   │   ├── api/              # API 路由
-│   │   └── static/           # 静态资源（人脸头像）
-│   ├── tests/                # 测试用例
+│   │   ├── services/         # 业务逻辑层（认证、验证码、人脸、菜单、订单、初始化）
+│   │   ├── api/              # API 路由（deps.py 依赖注入 + v1/ 版本化路由）
+│   │   └── utils/            # 工具（文本格式化、PDF 导出）
+│   ├── static/faces/         # 人脸照片（运行产物，不提交）
+│   ├── tests/                # 测试用例（API 测试 + 订单服务单元测试）
 │   ├── .env                  # 环境变量（不提交）
-│   ├── pyproject.toml
-│   └── requirements.txt
+│   ├── pyproject.toml        # 项目元数据与 ruff/mypy 配置
+│   ├── requirements.txt      # 生产依赖
+│   └── requirements-dev.txt  # 开发/测试依赖
 │
 └── frontend/                 # Vue 3 前端
     ├── src/
@@ -253,6 +252,12 @@ LOG_LEVEL=INFO
 
 # 调试模式（可选）
 DEBUG=false
+
+# 生产模式（可选，start.py --prod 会自动设置）
+# SERVE_STATIC=true
+# FRONTEND_DIST_DIR=../frontend/dist
+# CORS_ORIGINS=https://example.com
+# CORS_ALLOW_CREDENTIALS=false
 ```
 
 ---
@@ -278,6 +283,9 @@ DEBUG=false
 
 ```bash
 cd backend
+
+# 安装测试依赖（首次）
+pip install -r requirements-dev.txt
 
 # 全部测试
 pytest tests

@@ -27,6 +27,7 @@ backend/.env
 # Database / runtime
 backend/static/faces/
 backend/server.log
+scripts/captcha_sample.png
 *.db
 *.sqlite3
 

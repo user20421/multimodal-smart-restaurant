@@ -1,6 +1,5 @@
 """
 系统路由
-保持与原后端API格式兼容
 """
 from fastapi import APIRouter, Request
 from datetime import datetime, timezone

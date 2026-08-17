@@ -27,11 +27,6 @@ FRONTEND_URL = f"http://localhost:{FRONTEND_PORT}"
 # Docker 容器配置
 DOCKER_CONTAINERS = [
     {
-        "name": "mongo-server",
-        "image": "mongo:latest",
-        "ports": {"27017": "27017"},
-    },
-    {
         "name": "redis-server",
         "image": "redis:latest",
         "ports": {"6379": "6379"},
@@ -40,7 +35,7 @@ DOCKER_CONTAINERS = [
         "name": "mysql-server",
         "image": "mysql:latest",
         "ports": {"3306": "3306"},
-        "env": {"MYSQL_ROOT_PASSWORD": "123456", "MYSQL_DATABASE": "restaurant"},
+        "env": {"MYSQL_ROOT_PASSWORD": "123456", "MYSQL_DATABASE": "meiwei_bot"},
     },
 ]
 
@@ -431,7 +426,7 @@ def main():
         # 生产模式告诉后端托管静态文件
         if is_prod:
             backend_env["SERVE_STATIC"] = "true"
-            backend_env["STATIC_DIR"] = str(frontend_dir / "dist")
+            backend_env["FRONTEND_DIST_DIR"] = str(frontend_dir / "dist")
 
         creationflags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
         backend_proc = subprocess.Popen(

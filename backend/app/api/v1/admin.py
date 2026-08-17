@@ -1,6 +1,5 @@
 """
 商家管理路由
-保持与原后端API格式兼容
 """
 import io
 from fastapi import APIRouter, Depends, HTTPException
@@ -91,9 +90,7 @@ async def admin_list_orders(
     db: AsyncSession = Depends(get_db),
 ):
     """商家获取全部订单（分页）"""
-    page = max(1, page)
-    page_size = max(1, min(page_size, 100))
-    orders, total = await get_all_orders_paginated(db, page, page_size)
+    orders, total, page, page_size = await get_all_orders_paginated(db, page, page_size)
     return {
         "items": orders,
         "total": total,
@@ -128,11 +125,10 @@ async def admin_complete_order(
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """商家完成订单制作，并通知用户"""
+    """商家完成订单制作"""
     order = await complete_order(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
-    await db.commit()
     return {"message": "订单已完成", "order": order}
 
 
@@ -142,7 +138,7 @@ async def admin_export_orders(
     db: AsyncSession = Depends(get_db),
 ):
     """商家导出全部订单为 PDF"""
-    orders, _ = await get_all_orders_paginated(db, page=1, page_size=1000)
+    orders, _, _, _ = await get_all_orders_paginated(db, page=1, page_size=1000)
     pdf_bytes = build_orders_pdf(
         [o.model_dump() for o in orders],
         title="商家订单列表",

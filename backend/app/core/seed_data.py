@@ -26,21 +26,21 @@ _MENU_ITEM_SIGNATURES = {
 
 MENU_ITEMS: list[dict[str, Any]] = [
     # 热菜
-    {"name": "招牌水煮鱼", "price": 88.0, "spicy_level": 4, "category": "热菜", "tags": "招牌,辣,鱼,麻辣,重口味", "stock": 50,
+    {"name": "招牌水煮鱼", "price": 88.0, "spicy_level": 3, "category": "热菜", "tags": "招牌,辣,鱼,麻辣,重口味", "stock": 50,
      "description": "精选当日鲜活草鱼，片成薄如蝉翼的鱼片，以秘制红油、汉源花椒、郫县豆瓣烹制。鱼肉滑嫩无刺，麻辣鲜香，底部铺垫黄豆芽和宽粉，吸饱汤汁，是本店每桌必点的招牌菜。"},
-    {"name": "毛血旺", "price": 68.0, "spicy_level": 5, "category": "热菜", "tags": "辣,重庆,重口味,下饭", "stock": 40,
+    {"name": "毛血旺", "price": 68.0, "spicy_level": 3, "category": "热菜", "tags": "辣,重庆,重口味,下饭", "stock": 40,
      "description": "重庆江湖菜代表，鸭血、毛肚、黄喉、午餐肉、鳝鱼片等十余种食材汇聚一锅，红油翻滚，花椒飘香，麻辣过瘾，是嗜辣老饕的心头好。"},
     {"name": "宫保鸡丁", "price": 42.0, "spicy_level": 2, "category": "热菜", "tags": "经典,鸡肉,微辣,下饭,酸甜", "stock": 80,
      "description": "传承百年的川菜经典，选用嫩滑鸡腿肉丁，搭配酥脆花生米、干辣椒节和葱白段。荔枝味型，酸甜微辣，口感层次丰富，老少皆宜。"},
-    {"name": "麻婆豆腐", "price": 28.0, "spicy_level": 4, "category": "热菜", "tags": "经典,豆腐,辣,下饭,素食", "stock": 100,
+    {"name": "麻婆豆腐", "price": 28.0, "spicy_level": 3, "category": "热菜", "tags": "经典,豆腐,辣,下饭,素食", "stock": 100,
      "description": "四川传统名菜，以嫩豆腐为主料，配牛肉末，以豆瓣酱、花椒面、辣椒面调味。麻、辣、烫、香、酥、嫩、鲜、活，八字俱全，拌饭一绝。"},
     {"name": "回锅肉", "price": 48.0, "spicy_level": 2, "category": "热菜", "tags": "经典,猪肉,微辣,下饭", "stock": 60,
      "description": "川菜之首，选用二刀肉煮至七分熟，切片后回锅煸炒至灯盏窝状，加入青蒜苗、豆瓣酱、甜面酱，咸香微辣，肥而不腻。"},
     {"name": "鱼香肉丝", "price": 38.0, "spicy_level": 1, "category": "热菜", "tags": "经典,猪肉,微辣,下饭,酸甜", "stock": 80,
      "description": "川菜经典味型\"鱼香味\"的代表作。猪里脊切丝，配木耳、冬笋，以泡椒、糖、醋调味，咸甜酸辣兼备，葱姜蒜香浓郁。"},
-    {"name": "辣子鸡", "price": 56.0, "spicy_level": 5, "category": "热菜", "tags": "辣,鸡肉,重口味,下酒,重庆", "stock": 45,
+    {"name": "辣子鸡", "price": 56.0, "spicy_level": 3, "category": "热菜", "tags": "辣,鸡肉,重口味,下酒,重庆", "stock": 45,
      "description": "重庆歌乐山特色，整鸡剁成小块，先炸后炒，与大量干辣椒、花椒一同爆炒。鸡肉外酥里嫩，麻辣干香，越嚼越有味，是下酒佳肴。"},
-    {"name": "小炒黄牛肉", "price": 52.0, "spicy_level": 4, "category": "热菜", "tags": "辣,牛肉,下饭,重口味", "stock": 40,
+    {"name": "小炒黄牛肉", "price": 52.0, "spicy_level": 3, "category": "热菜", "tags": "辣,牛肉,下饭,重口味", "stock": 40,
      "description": "湖南风味融入川菜技法，黄牛肉切片大火快炒，搭配小米辣、泡椒、香菜，肉质鲜嫩，香辣过瘾，锅气十足。"},
     {"name": "干煸四季豆", "price": 32.0, "spicy_level": 3, "category": "热菜", "tags": "辣,素菜,干香,下饭", "stock": 70,
      "description": "四季豆干煸至表皮起皱呈虎皮状，搭配肉末、芽菜、干辣椒，麻辣干香，口感独特，是非常受欢迎的素菜。"},
@@ -50,7 +50,7 @@ MENU_ITEMS: list[dict[str, Any]] = [
      "description": "成都传统名菜，以牛心、牛舌、牛肚、牛肉为主料，卤制后切片，淋上红油、花椒粉、芝麻、花生碎，麻辣浓香，口感丰富。"},
     {"name": "糖醋里脊", "price": 36.0, "spicy_level": 0, "category": "热菜", "tags": "甜,猪肉,开胃,酥脆,不辣", "stock": 60,
      "description": "外酥里嫩的猪里脊肉裹上酸甜芡汁，色泽金黄诱人，酸甜适口，深受小朋友和女性顾客喜爱。"},
-    {"name": "水煮牛肉", "price": 58.0, "spicy_level": 5, "category": "热菜", "tags": "辣,牛肉,重口味,下饭", "stock": 40,
+    {"name": "水煮牛肉", "price": 58.0, "spicy_level": 3, "category": "热菜", "tags": "辣,牛肉,重口味,下饭", "stock": 40,
      "description": "川菜代表作，嫩牛肉片在红油辣汤中烫熟，麻辣鲜香，上面铺满干辣椒和花椒，热油一浇，香气四溢。"},
     {"name": "东坡肘子", "price": 128.0, "spicy_level": 0, "category": "热菜", "tags": "经典,猪肉,不辣,大菜,宴请", "stock": 20,
      "description": "传承自苏东坡的家宴菜，猪前肘整只炖煮4小时，皮肉酥烂，色泽红亮，咸香浓郁，入口即化。适合4人以上分享。"},
@@ -82,7 +82,7 @@ MENU_ITEMS: list[dict[str, Any]] = [
      "description": "选用鲜活海鲈鱼，清蒸锁住原汁原味，鱼肉细嫩洁白，佐以姜丝葱丝和蒸鱼豉油，清淡鲜美，营养丰富。"},
     {"name": "蒜蓉粉丝蒸扇贝", "price": 8.0, "spicy_level": 0, "category": "海鲜", "tags": "海鲜,蒜香,清淡,蒸菜,不辣", "stock": 60,
      "description": "新鲜大扇贝铺上蒜蓉和龙口粉丝，蒸制而成，蒜香浓郁，贝肉鲜嫩，粉丝吸满汤汁，鲜美无比。按只售卖。"},
-    {"name": "香辣虾", "price": 68.0, "spicy_level": 4, "category": "海鲜", "tags": "海鲜,辣,重口味,酥脆", "stock": 35,
+    {"name": "香辣虾", "price": 68.0, "spicy_level": 3, "category": "海鲜", "tags": "海鲜,辣,重口味,酥脆", "stock": 35,
      "description": "基围虾开背去虾线，炸至外壳酥脆，与干辣椒、花椒、芹菜一同爆炒，香辣酥脆，连壳都能吃。"},
     {"name": "干烧大黄鱼", "price": 98.0, "spicy_level": 3, "category": "海鲜", "tags": "海鲜,辣,大菜,宴请", "stock": 20,
      "description": "整条大黄鱼先煎后烧，以郫县豆瓣、泡椒、姜蒜调味，鱼肉入味，汤汁浓郁，是宴席上的硬菜。"},
@@ -126,15 +126,7 @@ def _mark_signatures() -> None:
         item["is_recommended"] = 1 if (item["name"] in _MENU_ITEM_SIGNATURES or "招牌" in tags) else 0
 
 
-def _normalize_spicy_level() -> None:
-    """将辣度统一归并为 4 级：0不辣、1微辣、2中辣、3特辣。"""
-    mapping = {0: 0, 1: 1, 2: 2, 3: 3, 4: 3, 5: 3}
-    for item in MENU_ITEMS:
-        item["spicy_level"] = mapping.get(item.get("spicy_level", 0), 0)
-
-
 _mark_signatures()
-_normalize_spicy_level()
 
 
 def get_menu_categories() -> list[dict[str, Any]]:

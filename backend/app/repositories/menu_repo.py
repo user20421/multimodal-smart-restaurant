@@ -17,10 +17,6 @@ class MenuCategoryRepository(BaseRepository[MenuCategory]):
         result = await db.execute(select(MenuCategory).where(MenuCategory.name == name))
         return result.scalar_one_or_none()
 
-    async def get_all_ordered(self, db: AsyncSession) -> List[MenuCategory]:
-        result = await db.execute(select(MenuCategory).order_by(MenuCategory.sort_order))
-        return result.scalars().all()
-
 
 class MenuItemRepository(BaseRepository[MenuItem]):
     def __init__(self):
@@ -29,21 +25,6 @@ class MenuItemRepository(BaseRepository[MenuItem]):
     async def get_by_name(self, db: AsyncSession, name: str) -> Optional[MenuItem]:
         result = await db.execute(select(MenuItem).where(MenuItem.name == name))
         return result.scalar_one_or_none()
-
-    async def get_by_category(self, db: AsyncSession, category: str) -> List[MenuItem]:
-        result = await db.execute(
-            select(MenuItem).where(MenuItem.category == category).order_by(MenuItem.id)
-        )
-        return result.scalars().all()
-
-    async def get_recommended(self, db: AsyncSession, limit: int = 8) -> List[MenuItem]:
-        result = await db.execute(
-            select(MenuItem)
-            .where(MenuItem.is_recommended == 1)
-            .order_by(MenuItem.sales_count.desc())
-            .limit(limit)
-        )
-        return result.scalars().all()
 
     async def search_by_keyword(self, db: AsyncSession, keyword: str) -> List[MenuItem]:
         result = await db.execute(
