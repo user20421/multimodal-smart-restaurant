@@ -1,4 +1,4 @@
-# 点餐机器人 · 美味餐厅
+# 多模态智能餐厅系统
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![Vue.js](https://img.shields.io/badge/Vue-3.x-green)](https://vuejs.org/)
