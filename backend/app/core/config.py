@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # 日志配置
     log_level: str = "INFO"
 
-    # 静态资源目录（人脸照片等，相对于 backend/ 目录）
+    # 静态资源目录（保留挂载，相对于 backend/ 目录）
     static_dir: str = "static"
 
     # 生产模式：托管前端静态文件

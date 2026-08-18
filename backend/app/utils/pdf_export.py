@@ -58,13 +58,18 @@ def _items_text(items: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_orders_pdf(orders: List[Dict[str, Any]], title: str = "订单列表") -> bytes:
+def build_orders_pdf(
+    orders: List[Dict[str, Any]],
+    title: str = "订单列表",
+    show_user_id: bool = True,
+) -> bytes:
     """
     根据订单列表生成 PDF 字节流。
 
     Args:
-        orders: 订单字典列表，每个字典包含 id/status/created_at/items/total_price 等字段。
+        orders: 订单字典列表，每个字典包含 id/user_id/username/status/created_at/items/total_price 等字段。
         title: PDF 标题。
+        show_user_id: 是否包含用户ID列（商家端导出为 True；用户端导出不展示用户ID）。
 
     Returns:
         PDF 文件字节流。
@@ -97,33 +102,39 @@ def build_orders_pdf(orders: List[Dict[str, Any]], title: str = "订单列表") 
     if not orders:
         story.append(Paragraph("暂无订单数据", normal_style))
     else:
-        # 表头
-        data = [[
-            Paragraph("订单号", normal_style),
-            Paragraph("状态", normal_style),
-            Paragraph("下单时间", normal_style),
-            Paragraph("菜品明细", normal_style),
-            Paragraph("总价", normal_style),
-        ]]
+        # 表头（用户端导出不包含用户ID列）
+        headers = ["订单号"]
+        if show_user_id:
+            headers.append("用户ID")
+        headers += ["用户名", "状态", "下单时间", "菜品明细", "总价"]
+        data = [[Paragraph(h, normal_style) for h in headers]]
 
         for order in orders:
-            data.append([
-                Paragraph(str(order.get("id", "")), normal_style),
+            row = [Paragraph(str(order.get("id", "")), normal_style)]
+            if show_user_id:
+                row.append(Paragraph(str(order.get("user_id", "")), normal_style))
+            row += [
+                Paragraph(order.get("username") or "-", normal_style),  # 脱敏用户名，如 刘**
                 Paragraph(order_status_text(order.get("status", "")), normal_style),
                 Paragraph(_format_datetime(order.get("created_at")), normal_style),
                 Paragraph(_items_text(order.get("items", [])), normal_style),
                 Paragraph(f"{order.get('total_price', 0):.2f}元", normal_style),
-            ])
+            ]
+            data.append(row)
 
         # A4 宽度约 21cm，减去左右边距各 2cm，可用约 17cm
-        col_widths = [1.5 * cm, 2 * cm, 3.5 * cm, 6.5 * cm, 2 * cm]
+        items_col = len(headers) - 2  # “菜品明细”列索引
+        if show_user_id:
+            col_widths = [1.2 * cm, 1.5 * cm, 2 * cm, 1.8 * cm, 3.3 * cm, 5.2 * cm, 2 * cm]
+        else:
+            col_widths = [1.2 * cm, 2 * cm, 1.8 * cm, 3.3 * cm, 6.7 * cm, 2 * cm]
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f5f7fa")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("ALIGN", (3, 1), (3, -1), "LEFT"),  # 菜品明细左对齐
+            ("ALIGN", (items_col, 1), (items_col, -1), "LEFT"),  # 菜品明细左对齐
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("FONTNAME", (0, 0), (-1, 0), FONT_NAME),
             ("FONTSIZE", (0, 0), (-1, 0), 10),

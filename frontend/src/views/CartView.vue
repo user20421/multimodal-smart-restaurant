@@ -54,13 +54,11 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCartStore } from '@/features/cart/stores/cart.store'
-import { useAuthStore } from '@/features/auth/stores/auth.store'
-import { sendChatMessage } from '@/features/chat/api/chat.api'
+import { createOrder } from '@/features/orders/api/order.api'
 import type { CartItem } from '@/shared/types'
 
 const router = useRouter()
 const cartStore = useCartStore()
-const authStore = useAuthStore()
 const ordering = ref(false)
 
 function handleClearCart() {
@@ -79,26 +77,14 @@ async function confirmOrder() {
   }
   ordering.value = true
   try {
-    const cart: CartItem[] = JSON.parse(JSON.stringify(cartStore.items || []))
-    const res = await sendChatMessage({
-      user_id: authStore.userId ?? 0,
-      message: '确认下单',
-      cart,
-    })
-    const data = res.data
-    if (data.cart) {
-      cartStore.setCart(data.cart)
-    }
-    // 根据返回的 cart 是否为空判断下单是否成功
-    if (data.cart && Array.isArray(data.cart) && data.cart.length === 0) {
-      ElMessage.success('下单成功！')
-      router.push('/orders')
-    } else {
-      // cart 不为空说明下单失败（有错误信息）
-      ElMessage.warning(data.response || '下单失败')
-    }
-  } catch (err) {
-    ElMessage.error('下单失败')
+    // 直接调用传统订单接口创建订单（不再经过聊天接口）
+    const items: CartItem[] = JSON.parse(JSON.stringify(cartStore.items))
+    await createOrder(items)
+    cartStore.clearCart()
+    ElMessage.success('下单成功！')
+    router.push('/orders')
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '下单失败')
     console.error(err)
   } finally {
     ordering.value = false

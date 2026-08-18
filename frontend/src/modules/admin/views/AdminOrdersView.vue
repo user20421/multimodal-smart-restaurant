@@ -18,7 +18,9 @@
       <div class="table-wrapper">
         <el-table :data="orders" stripe v-loading="loading">
           <el-table-column prop="id" label="订单号" width="80" />
-          <el-table-column prop="user_id" label="用户ID" width="90" />
+          <el-table-column label="用户" width="110">
+            <template #default="scope">{{ scope.row.username || ('用户#' + scope.row.user_id) }}</template>
+          </el-table-column>
           <el-table-column prop="status" label="状态" width="100">
             <template #default="scope">
               <el-tag :type="statusType(scope.row.status)">{{ statusText(scope.row.status) }}</el-tag>

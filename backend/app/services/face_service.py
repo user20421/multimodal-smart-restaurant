@@ -1,13 +1,11 @@
 """
 人脸识别服务
 基于 face_recognition（dlib）实现 128 维人脸特征提取与比对。
+出于隐私保护，不保存用户人脸照片，仅存储不可逆的特征向量。
 """
 import base64
 import io
 import json
-import os
-import uuid
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 import face_recognition
@@ -15,7 +13,6 @@ import numpy as np
 from PIL import Image
 
 from app.core.exceptions import BusinessException
-from app.core.config import settings
 
 
 # 默认相似度阈值（欧氏距离，越小越相似）
@@ -66,24 +63,6 @@ def compare_face_distance(known_encoding: np.ndarray, unknown_encoding: np.ndarr
     known = np.asarray(known_encoding, dtype=np.float64)
     unknown = np.asarray(unknown_encoding, dtype=np.float64)
     return float(np.linalg.norm(known - unknown))
-
-
-def save_face_image(base64_str: str, username: str) -> str:
-    """保存人脸照片到 static/faces/{username}_{uuid}.jpg，返回相对路径。"""
-    if "," in base64_str:
-        base64_str = base64_str.split(",", 1)[1]
-    image_bytes = base64.b64decode(base64_str)
-
-    static_dir = Path(settings.static_dir or "static")
-    faces_dir = static_dir / "faces"
-    faces_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"{username}_{uuid.uuid4().hex[:8]}.jpg"
-    file_path = faces_dir / filename
-    with open(file_path, "wb") as f:
-        f.write(image_bytes)
-
-    return f"/static/faces/{filename}"
 
 
 def find_best_face_match(

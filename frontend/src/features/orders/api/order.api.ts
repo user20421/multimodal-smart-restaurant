@@ -2,11 +2,15 @@
  * 订单相关 API（顾客端）
  */
 import api from '@/shared/api/client'
-import type { PaginatedOrders } from '@/shared/types'
+import type { CartItem, Order, PaginatedOrders } from '@/shared/types'
 
 export interface PaginationParams {
   page?: number
   page_size?: number
+}
+
+export function createOrder(items: CartItem[], remark?: string) {
+  return api.post<Order>('/order', { items, remark })
 }
 
 export function fetchMyOrders(userId: number, params?: PaginationParams) {

@@ -31,8 +31,8 @@
 
             <div class="order-info">
               <div class="info-row">
-                <span class="label">用户ID：</span>
-                <span>{{ order.user_id }}</span>
+                <span class="label">用户：</span>
+                <span>{{ order.username || ('用户#' + order.user_id) }}</span>
               </div>
               <div class="info-row">
                 <span class="label">下单时间：</span>

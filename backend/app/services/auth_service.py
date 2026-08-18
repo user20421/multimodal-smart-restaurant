@@ -13,7 +13,6 @@ from app.core.exceptions import AuthenticationException, BusinessException
 from app.core.config import settings
 from app.services.face_service import (
     extract_face_encoding,
-    save_face_image,
     encoding_to_list,
     find_best_face_match,
     encoding_from_list,
@@ -233,7 +232,7 @@ async def face_login_user(db: AsyncSession, data: FaceLoginRequest) -> tuple[Use
 async def register_face(
     db: AsyncSession, user_id: int, data: FaceRegisterRequest
 ) -> UserOut:
-    """为当前登录用户录入/更新人脸。"""
+    """为当前登录用户录入/更新人脸（只存特征向量，不保存照片）。"""
     user = await user_repo.get(db, user_id)
     if not user:
         raise AuthenticationException("用户不存在")
@@ -242,9 +241,9 @@ async def register_face(
     if encoding is None:
         raise BusinessException("未检测到人脸，请重新拍摄")
 
-    face_image_url = save_face_image(data.face_image_base64, user.username)
+    # 隐私保护：不保存人脸照片，仅存储 128 维特征向量
     user.face_encoding = encoding_to_list(encoding)
-    user.face_image_url = face_image_url
+    user.face_image_url = None
 
     await db.commit()
     await db.refresh(user)

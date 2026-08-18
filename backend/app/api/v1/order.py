@@ -95,7 +95,9 @@ async def export_order(
     if current_user["role"] != "admin" and order.user_id != current_user["id"]:
         raise HTTPException(status_code=403, detail="无权导出此订单")
 
-    pdf_bytes = build_orders_pdf([order.model_dump()], title=f"订单 #{order_id} 详情")
+    pdf_bytes = build_orders_pdf(
+        [order.model_dump()], title=f"订单 #{order_id} 详情", show_user_id=False
+    )
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -113,6 +115,7 @@ async def export_all_orders(
     pdf_bytes = build_orders_pdf(
         [o.model_dump() for o in orders],
         title="我的订单列表",
+        show_user_id=False,
     )
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

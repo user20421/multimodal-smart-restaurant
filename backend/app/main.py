@@ -14,7 +14,7 @@ from app.core.exceptions import AppException
 from app.core.database import init_db, AsyncSessionLocal
 from app.core.logging_config import setup_logging, get_logger
 from app.core.config import settings
-from app.api.v1 import auth, menu, order, chat, admin, system
+from app.api.v1 import auth, menu, order, admin, system
 from app.services.init_service import initialize_system
 
 # 导入所有模型，确保 Base.metadata 包含所有表
@@ -88,7 +88,6 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1", tags=["认证"])
 app.include_router(menu.router, prefix="/api/v1", tags=["菜单"])
 app.include_router(order.router, prefix="/api/v1", tags=["订单"])
-app.include_router(chat.router, prefix="/api/v1", tags=["聊天"])
 app.include_router(admin.router, prefix="/api/v1", tags=["商家管理"])
 app.include_router(system.router, prefix="/api/v1", tags=["系统"])
 
@@ -98,7 +97,7 @@ async def health_check():
     return {"status": "ok", "app": settings.app_name}
 
 
-# 挂载应用静态资源目录（人脸头像等）
+# 挂载应用静态资源目录（当前无内容，保留挂载以备后用）
 static_files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), settings.static_dir)
 os.makedirs(static_files_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_files_dir), name="static")

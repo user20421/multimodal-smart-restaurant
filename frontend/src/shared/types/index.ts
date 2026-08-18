@@ -72,6 +72,7 @@ export type OrderStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled'
 export interface Order {
   id: number
   user_id: number
+  username?: string | null  // 脱敏后的用户名（商家端展示），如 刘**
   status: OrderStatus
   total_price: number
   remark?: string | null

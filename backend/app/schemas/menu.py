@@ -1,9 +1,11 @@
 """
 菜单相关Schema
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, List
 from datetime import datetime
+
+from app.utils.formatters import utc_to_local
 
 
 class MenuCategoryOut(BaseModel):
@@ -46,5 +48,10 @@ class MenuItemOut(MenuItemBase):
     sales_count: int
     created_at: datetime
     updated_at: datetime
+
+    @field_serializer("created_at", "updated_at")
+    def _serialize_local_time(self, dt: datetime) -> datetime:
+        """数据库存 UTC，输出统一转东八区本地时间"""
+        return utc_to_local(dt)
 
     model_config = {"from_attributes": True}
