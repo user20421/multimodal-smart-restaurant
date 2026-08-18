@@ -27,12 +27,16 @@ backend/.env
 !.env.example
 
 # Database / runtime
-backend/static/faces/       # 人脸照片目录（已废弃：人脸仅存储特征向量，不再保存照片）
+# 人脸照片目录（已废弃：人脸仅存储特征向量，不再保存照片）
+backend/static/faces/
 backend/server.log
 scripts/captcha_sample.png
-backend/test_*.pdf           # PDF 导出本地验证产物
-backend/app/ai/rag/vectorstore/  # Chroma 向量库（运行产物，启动时自动重建）
-image.png                        # 图片搜菜本地测试图片
+# PDF 导出本地验证产物
+backend/test_*.pdf
+# Chroma 向量库（运行产物，启动时自动重建）
+backend/app/ai/rag/vectorstore/
+# 图片搜菜本地测试图片
+image.png
 *.db
 *.sqlite3
 
