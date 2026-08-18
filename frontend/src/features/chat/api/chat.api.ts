@@ -11,7 +11,7 @@ const IMAGE_CHAT_TIMEOUT = 100_000
 
 export function sendChatMessage(payload: ChatRequest) {
   const timeout = payload.image_base64 ? IMAGE_CHAT_TIMEOUT : CHAT_TIMEOUT
-  return api.post<ChatResponse>('/chat', payload, { timeout })
+  return api.post<ChatResponse>('/ai/chat', payload, { timeout })
 }
 
 /**
@@ -26,7 +26,7 @@ export async function* sendChatMessageStream(payload: ChatRequest): AsyncGenerat
   const timer = setTimeout(() => controller.abort(), timeout)
 
   try {
-    const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+    const response = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
       method: 'POST',
       signal: controller.signal,
       headers: {

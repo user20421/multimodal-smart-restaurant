@@ -16,8 +16,10 @@
 
 <template>
   <div class="chat-container">
+    <!-- 左栏：页面标题 + 数字人头像 + 语音播报开关 -->
     <div class="avatar-area">
-      <DigitalAvatar :status="avatarStatus" />
+      <div class="chat-title">智能点餐助手</div>
+      <DigitalAvatar :status="avatarStatus" style="margin-top: 15px" />
 
       <el-button
         circle
@@ -33,6 +35,8 @@
       </el-button>
     </div>
 
+    <!-- 右栏：消息列表 + 快捷按钮 + 输入框 -->
+    <div class="chat-main">
     <div class="chat-messages" ref="messageBox">
       <div
         v-for="(msg, index) in messages"
@@ -70,7 +74,7 @@
 
     <div class="quick-actions">
       <el-button size="small" @click="sendQuick('有什么推荐的菜品？')">推荐菜品</el-button>
-      <el-button size="small" @click="sendQuick('查看菜单')">查看菜单</el-button>
+      <el-button size="small" @click="router.push('/menu')">查看菜单</el-button>
       <el-button size="small" @click="sendQuick('查询我的订单')">查询订单</el-button>
 
       <el-button size="small" type="success" @click="triggerImageUpload">
@@ -116,6 +120,7 @@
           </el-button>
         </template>
       </el-input>
+    </div>
     </div>
 
     <el-drawer v-model="cartVisible" title="购物车" size="360px">
@@ -506,22 +511,38 @@ async function handleClearChat() {
 
 .chat-container {
   display: flex;
-  flex-direction: column;
-  height: calc(100vh - 140px);
+  flex-direction: row;
+  height: 100%;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-  padding: 16px;
   position: relative;
+}
+
+.chat-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  padding: 16px 0 8px;
+  text-align: center;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: 6px;
 }
 
 .avatar-area {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: flex-start;
   align-items: center;
   gap: 12px;
-  padding: 8px 0 4px;
-  min-height: 72px;
+  width: 160px;
+  flex-shrink: 0;
+  padding: 0 8px 8px;
+  border-right: 1px solid #f0f0f0;
 }
 
 .speech-toggle {
@@ -531,7 +552,7 @@ async function handleClearChat() {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
+  padding: 0 10px;
   margin-bottom: 10px;
 }
 

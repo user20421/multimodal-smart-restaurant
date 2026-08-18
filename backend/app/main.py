@@ -15,6 +15,8 @@ from app.core.database import init_db, AsyncSessionLocal
 from app.core.logging_config import setup_logging, get_logger
 from app.core.config import settings
 from app.api.v1 import auth, menu, order, admin, system
+from app.ai import router as ai_router
+from app.ai.rag import manager as rag_manager
 from app.services.init_service import initialize_system
 
 # 导入所有模型，确保 Base.metadata 包含所有表
@@ -44,9 +46,13 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await initialize_system(db)
 
+    # AI 知识库：向量库缺失或菜单变更时自动重建，并启动后台菜单变更监听
+    await rag_manager.ensure_ready()
+    rag_manager.start_background_refresh()
+
     yield
 
-    # 无其他外部资源需要关闭
+    rag_manager.stop_background_refresh()
 
 
 app = FastAPI(
@@ -90,6 +96,8 @@ app.include_router(menu.router, prefix="/api/v1", tags=["菜单"])
 app.include_router(order.router, prefix="/api/v1", tags=["订单"])
 app.include_router(admin.router, prefix="/api/v1", tags=["商家管理"])
 app.include_router(system.router, prefix="/api/v1", tags=["系统"])
+# 智能聊天模块（AI 子模块，独立目录 backend/app/ai/）
+app.include_router(ai_router.router, prefix="/api/v1/ai", tags=["智能聊天"])
 
 
 @app.get("/health")

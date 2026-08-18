@@ -1,10 +1,13 @@
 <!-- 根布局组件：侧边栏导航 + 主内容区，根据角色渲染不同菜单 -->
 <template>
   <el-container v-if="!isLoginPage" class="layout-container">
-    <el-aside width="220px" class="sidebar">
+    <el-aside width="180px" class="sidebar">
       <div class="logo">
         <el-icon size="32" color="#fff"><Food /></el-icon>
         <span class="title">{{ isAdmin ? '商家后台' : '美味餐厅' }}</span>
+      </div>
+      <div v-if="authStore.user" class="welcome">
+        欢迎您，{{ isAdmin ? '管理员' : authStore.user.username }}！
       </div>
       <el-menu
         :default-active="$route.path"
@@ -62,19 +65,21 @@
           </el-menu-item>
         </template>
       </el-menu>
+
+      <!-- 退出登录（自定义元素：需先弹确认框，不能用 el-menu-item 的自动跳转） -->
+      <div class="logout-item" @click="handleLogout">
+        <el-icon><SwitchButton /></el-icon>
+        <span>退出登录</span>
+      </div>
     </el-aside>
 
     <el-container>
-      <el-header class="header">
+      <!-- 聊天页标题移入左栏，不显示全局顶栏 -->
+      <el-header v-if="route.path !== '/chat'" class="header">
         <div class="header-title">{{ pageTitle }}</div>
-        <div class="header-right">
-          <span v-if="authStore.user" style="margin-right: 12px; color: #666;">
-            {{ authStore.isAdmin ? '管理员' : authStore.user.username }}
-          </span>
-          <el-button size="small" @click="handleLogout">退出登录</el-button>
-        </div>
       </el-header>
-      <el-main class="main-content">
+      <!-- 聊天页去除内边距，让右侧聊天区顶到页面边缘 -->
+      <el-main class="main-content" :class="{ 'main-content--flush': route.path === '/chat' }">
         <router-view />
       </el-main>
     </el-container>
@@ -87,10 +92,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { useCartStore } from '@/features/cart/stores/cart.store'
 import { useChatStore } from '@/features/chat/stores/chat.store'
-import { User } from '@element-plus/icons-vue'
+import { User, SwitchButton } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -118,7 +124,16 @@ const pageTitle = computed(() => {
   return titles[route.path] || '美味餐厅'
 })
 
-function handleLogout() {
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return // 用户点击取消，不退出
+  }
   authStore.logout()
   chatStore.clearMessages()
   // 只清空内存中的购物车，保留 localStorage（按用户隔离）
@@ -129,7 +144,7 @@ function handleLogout() {
 
 <style scoped>
 .layout-container {
-  height: 100vh;
+  height: 100%;
 }
 
 .sidebar {
@@ -151,6 +166,16 @@ function handleLogout() {
   font-weight: bold;
 }
 
+.welcome {
+  color: #bfcbd9;
+  font-size: 13px;
+  text-align: center;
+  padding: 10px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .header {
   background-color: #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
@@ -170,5 +195,34 @@ function handleLogout() {
   background-color: #f5f7fa;
   padding: 20px;
   overflow-y: auto;
+}
+
+.main-content--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 退出登录：精确复刻 el-menu-item 的尺寸参数保证对齐 */
+.logout-item {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 20px;
+  box-sizing: border-box;
+  color: #bfcbd9;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.logout-item .el-icon {
+  margin-right: 5px;
+  width: 24px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.logout-item:hover {
+  background-color: #263445;
+  color: #fff;
 }
 </style>

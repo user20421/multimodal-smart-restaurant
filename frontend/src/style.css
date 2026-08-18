@@ -1,5 +1,20 @@
 /* 全局基础样式 */
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* 应用整体占页面 99% 并居中，四周留出呼吸边距 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #eef1f5;
+}
+
+#app {
+  width: 99%;
+  height: 99%;
 }

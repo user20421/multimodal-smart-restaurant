@@ -31,10 +31,11 @@
 - **顾客端**：浏览菜单、管理购物车、提交订单、查看订单（导出 PDF）、管理个人资料、录入人脸；
 - **商家端**：管理菜品、查看订单（显示脱敏用户名，如 `刘**`）、导出订单（PDF 含用户ID与脱敏用户名）；
 - **登录方式**：账号密码登录（带图片验证码）+ 人脸登录（仅存 128 维特征向量，不保存人脸照片）；
+- **智能点餐助手**：基于大模型的真实对话（百炼 DeepSeek）+ RAG 知识库（店铺/菜品/FAQ）+ 图片搜菜（智谱视觉模型）；
 - **账号体系**：默认管理员账号 `root` / `123456`，首次登录后强制修改密码；
 - **后端架构**：API → Service → Repository → Model，依赖 MySQL + Redis。
 
-> 说明：顾客端“智能点餐助手”聊天界面目前为保留的 UI 占位壳子，后端 `/chat` 接口已移除（购物车下单走传统 `POST /api/v1/order` 接口），后续接入真实 LLM 时再另行设计，相关 AI 配置见[配置说明](#配置说明)。
+> 说明：顾客端“智能点餐助手”已接入真实大模型（见[核心功能](#核心功能)），传统点餐链路（购物车下单等）走传统 `POST /api/v1/order` 接口，两者完全解耦。相关 AI 配置见[配置说明](#配置说明)。
 
 ---
 
@@ -48,6 +49,10 @@
 | 缓存   | Redis（图片验证码）                                             |
 | 导出   | reportlab（PDF）                                                |
 | 人脸识别 | face_recognition（dlib）                                       |
+| AI 框架 | LangChain 1.3 + LangGraph（Agent 运行时）                        |
+| 大语言模型 | 阿里云百炼 deepseek-v4-flash（OpenAI 兼容接口，已关闭思考模式）|
+| 视觉模型 | 智谱 GLM-4V-Flash（图片搜菜）                                    |
+| 向量模型 | 智谱 Embedding-3（512 维）+ Chroma 向量库 + 轻量 BM25 混合检索   |
 
 ---
 
@@ -169,7 +174,17 @@ multimodal-smart-restaurant/
 │   │   ├── repositories/     # 数据访问层
 │   │   ├── services/         # 业务逻辑层（认证、验证码、人脸、菜单、订单、初始化）
 │   │   ├── api/              # API 路由（deps.py 依赖注入 + v1/ 版本化路由）
-│   │   └── utils/            # 工具（文本格式化、PDF 导出）
+│   │   ├── utils/            # 工具（文本格式化、PDF 导出）
+│   │   └── ai/               # 智能聊天模块（独立子目录，传统代码只被调用不被修改）
+│   │       ├── router.py     # /api/v1/ai/chat、/chat/stream（SSE 流式）
+│   │       ├── config.py     # AI 配置读取（.env 优先，环境变量兜底，占位符视为未设置）
+│   │       ├── schemas.py    # AI 模块请求/响应模型
+│   │       ├── image_search.py  # 图片搜菜：视觉识别 + 菜单比对
+│   │       ├── llm/          # 模型客户端（bailian.py 文本对话 / zhipu.py 视觉）
+│   │       ├── rag/          # RAG 知识库（loader/retriever/manager/sync_dishes）
+│   │       │   ├── data/     # 知识文档（store/dishes/faq/policy，dishes 由数据库同步生成）
+│   │       │   └── vectorstore/   # Chroma 持久化产物（运行生成，不提交）
+│   │       └── agent/        # （预留）Agent 工具层
 │   ├── static/               # 静态资源目录（保留挂载，当前无内容）
 │   ├── tests/                # 测试用例（API 测试 + 订单服务单元测试）
 │   ├── .env                  # 环境变量（不提交）
@@ -215,6 +230,15 @@ multimodal-smart-restaurant/
 - 订单接口返回的用户名统一脱敏（仅保留首字，如 `刘**`）
 - 默认管理员 `root` / `123456` 首次登录强制修改密码
 
+### 智能点餐助手（AI 模块）
+
+独立子目录 `backend/app/ai/`，与传统后端完全解耦（传统代码只被调用、不被修改）：
+
+- **文本对话**：百炼 deepseek-v4-flash（LangChain ChatOpenAI，已用 `enable_thinking=false` 关闭思考模式防思维链泄漏）
+- **RAG 知识库**：店铺介绍/营业信息/FAQ/配送政策 + 39 道菜品文档（由数据库同步生成，保证单一事实源）；Chroma 向量检索 + BM25 关键词混合召回；启动时自动重建、商家改菜单后指纹轮询（5 分钟）自动重建、重建期间检索请求持锁排队
+- **图片搜菜**：智谱 GLM-4V-Flash 识别图片 → 是菜品则结合真实菜单由大模型比对推荐；不是菜品则提示重新上传
+- **SSE 流式输出**：打字机效果，前端聊天页（数字人头像 + 语音播报）
+
 ---
 
 ## API 概览
@@ -232,6 +256,8 @@ multimodal-smart-restaurant/
 | GET    | `/api/v1/menu`                   | 获取菜单         |
 | POST   | `/api/v1/order`                  | 创建订单         |
 | GET    | `/api/v1/orders`                 | 我的订单（分页） |
+| POST   | `/api/v1/ai/chat`                | 智能聊天（同步） |
+| POST   | `/api/v1/ai/chat/stream`         | 智能聊天（SSE 流式，支持图片搜菜） |
 | GET    | `/api/v1/admin/menu`             | 商家菜品管理     |
 | GET    | `/api/v1/admin/orders`           | 商家订单管理     |
 
@@ -401,3 +427,9 @@ pip install cryptography
 ### Q：为什么数据库里订单时间与本地时间差 8 小时？
 
 Docker 中的 MySQL 默认使用 UTC 时区，`created_at` 存的是 UTC 时间。本项目约定**数据库配置不动、使用侧统一转换**：`OrderOut` / `MenuItemOut` schema 在序列化输出时通过 `app.utils.formatters.utc_to_local()` 转为东八区时间（API 返回与 PDF 导出均自动生效），商家仪表盘“今日统计”查询也会先将本地日期边界换算为 UTC 再比较。
+
+### Q：知识库/向量库如何更新？
+
+- **启动时自动处理**：向量库缺失（如新部署）或菜单指纹变化时自动重建，无需人工干预；
+- **商家修改菜品**：后台任务每 5 分钟轮询菜单指纹（数量 + 最大更新时间），变化即自动同步菜品文档并重建向量库；
+- **手工修改静态文档**（`rag/data/store|faq|policy/`）：指纹管不到，需手动重建：`cd backend && python -m app.ai.rag.loader`，或删除 `vectorstore/` 目录后重启后端。
