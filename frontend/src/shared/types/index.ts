@@ -3,7 +3,7 @@
  * 与后端 Pydantic Schema 对齐
  */
 
-export type UserRole = 'admin' | 'customer'
+export type UserRole = 'admin' | 'customer' | 'superadmin'
 
 export interface User {
   id: number

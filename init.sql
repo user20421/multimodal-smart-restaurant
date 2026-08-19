@@ -91,6 +91,10 @@ CREATE TABLE IF NOT EXISTS `order_items` (
 INSERT IGNORE INTO `users` (`username`, `password`, `role`, `phone`, `gender`, `birth_date`, `need_change_password`) VALUES
     ('root', '$2b$12$fkZCE7zgWfpcQ5I2gJjgceTujP086R9VLDE6Ic5.5orr8lpcmia3C', 'admin', '13800138000', NULL, NULL, 1);
 
+-- 超级管理员账号（rootroot / rootroot，仅用于重置管理员密码）
+INSERT IGNORE INTO `users` (`username`, `password`, `role`, `phone`, `gender`, `birth_date`, `need_change_password`) VALUES
+    ('rootroot', '$2b$12$G06JvPN3kWwWGEevfUOb2OusydJtNshIFmBbeouyk/BGDXIZ6yXu6', 'superadmin', NULL, NULL, NULL, 0);
+
 -- 菜单分类
 INSERT IGNORE INTO `menu_categories` (`name`, `sort_order`, `description`) VALUES
     ('热菜', 1, '川味热炒，锅气十足，麻辣鲜香'),

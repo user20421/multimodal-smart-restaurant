@@ -81,8 +81,35 @@
             </el-button>
           </div>
         </el-form-item>
+        <div class="camera-tip">人脸识别功能需打开浏览器相机权限</div>
       </el-form>
     </el-card>
+
+    <!-- 项目信息卡片（右下角固定） -->
+    <div class="project-info">
+      <div class="info-title">项目信息</div>
+      <div class="info-item">
+        <span class="info-label">项目名称：</span>多模态智能点餐系统
+      </div>
+      <div class="info-item">
+        <span class="info-label">Github地址：</span>
+        <a href="https://github.com/user20421/multimodal-smart-restaurant" target="_blank" rel="noopener">
+          github.com/user20421/multimodal-smart-restaurant
+        </a>
+      </div>
+      <div class="info-item">
+        <span class="info-label">项目亮点：</span>全栈系统 + 多智能体 + 图像识别 + 人脸登录 + 语音合成
+      </div>
+      <div class="info-item">
+        <span class="info-label">作者邮箱：</span>xiaoy376@qq.com
+      </div>
+      <div class="info-item">
+        <span class="info-label">商家端账号：</span>root
+      </div>
+      <div class="info-item">
+        <span class="info-label">商家端密码：</span>123456
+      </div>
+    </div>
 
     <!-- 人脸登录弹窗 -->
     <el-dialog
@@ -131,13 +158,13 @@
     <!-- 注册弹窗 -->
     <el-dialog v-model="showRegister" title="用户注册" width="400px">
       <el-form :model="registerForm" label-position="top">
-        <el-form-item label="用户名">
+        <el-form-item label="用户名" required>
           <el-input
             v-model="registerForm.username"
             placeholder="请输入用户名"
           />
         </el-form-item>
-        <el-form-item label="密码">
+        <el-form-item label="密码" required>
           <el-input
             v-model="registerForm.password"
             type="password"
@@ -145,7 +172,7 @@
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认密码">
+        <el-form-item label="确认密码" required>
           <el-input
             v-model="registerForm.confirmPassword"
             type="password"
@@ -167,7 +194,7 @@
             <el-option label="女" value="female" />
           </el-select>
         </el-form-item>
-        <el-form-item label="出生日期">
+        <el-form-item label="出生日期" required>
           <el-date-picker
             v-model="registerForm.birth_date"
             type="date"
@@ -279,6 +306,8 @@ async function handleLogin() {
 
     if (data.user.role === "admin") {
       router.push("/admin");
+    } else if (data.user.role === "superadmin") {
+      router.push("/superadmin");
     } else {
       router.push("/chat");
     }
@@ -293,12 +322,20 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-  if (!registerForm.username || !registerForm.password) {
+  if (
+    !registerForm.username ||
+    !registerForm.password ||
+    !registerForm.confirmPassword
+  ) {
     ElMessage.warning("请填写完整信息");
     return;
   }
   if (!registerForm.gender) {
     ElMessage.warning("请选择性别");
+    return;
+  }
+  if (!registerForm.birth_date) {
+    ElMessage.warning("请选择出生日期");
     return;
   }
   if (registerForm.password !== registerForm.confirmPassword) {
@@ -401,6 +438,8 @@ async function captureAndLogin() {
 
       if (data.user.role === "admin") {
         router.push("/admin");
+      } else if (data.user.role === "superadmin") {
+        router.push("/superadmin");
       } else {
         router.push("/chat");
       }
@@ -469,6 +508,57 @@ async function captureAndLogin() {
   display: flex;
   gap: 12px;
   width: 100%;
+}
+
+.camera-tip {
+  margin-top: -8px;
+  text-align: center;
+  font-size: 12px;
+  color: #909399;
+}
+
+.project-info {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  max-width: 470px;
+  padding: 14px 18px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  line-height: 1.9;
+  color: #606266;
+}
+
+.info-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #303133;
+}
+
+.info-item a {
+  color: #409eff;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.info-item a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .project-info {
+    position: static;
+    margin: 16px auto 24px;
+    width: calc(100% - 40px);
+  }
 }
 
 .extra-btn {

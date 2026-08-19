@@ -47,7 +47,7 @@ async def _init_db():
     import app.models  # noqa: F401 确保 Base.metadata 包含所有表
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # 插入测试所需的最小数据：1 个分类 + 1 个菜品 + root 管理员
+    # 插入测试所需的最小数据：1 个分类 + 1 个菜品 + root 管理员 + rootroot 超级管理员
     from app.models.user import User
     from app.models.menu import MenuCategory, MenuItem
     from app.services.auth_service import _hash_password
@@ -58,6 +58,12 @@ async def _init_db():
             username="root",
             password=_hash_password("123456"),
             role="admin",
+            need_change_password=False,
+        ))
+        db.add(User(
+            username="rootroot",
+            password=_hash_password("rootroot"),
+            role="superadmin",
             need_change_password=False,
         ))
         await db.commit()
@@ -255,6 +261,41 @@ class TestOrders:
         """伪造 X-User-ID 头（无 JWT）应被拒绝"""
         r = client.get("/api/v1/orders", headers={"X-User-ID": "1", "X-User-Role": "admin"})
         assert r.status_code == 401
+
+
+class TestSuperAdmin:
+    def test_superadmin_reset_root_password(self):
+        """超级管理员可将 root 密码重置为初始值 123456"""
+        token = login_and_get_token("rootroot", "rootroot")
+        r = client.post("/api/v1/admin/reset-root-password", headers=auth_headers(token))
+        assert r.status_code == 200, f"Reset failed: {r.text}"
+        # 重置后 root 可用初始密码登录
+        root_token = login_and_get_token("root", "123456")
+        assert root_token
+
+    def test_admin_cannot_reset(self):
+        """普通管理员无权重置"""
+        token = login_and_get_token("root", "123456")
+        r = client.post("/api/v1/admin/reset-root-password", headers=auth_headers(token))
+        assert r.status_code == 403
+
+    def test_customer_cannot_reset(self):
+        """普通用户无权重置"""
+        import uuid
+        uname = f"cust_{uuid.uuid4().hex[:8]}"
+        register_user(uname)
+        token = login_and_get_token(uname)
+        r = client.post("/api/v1/admin/reset-root-password", headers=auth_headers(token))
+        assert r.status_code == 403
+
+    def test_superadmin_username_reserved(self):
+        """超级管理员用户名不可注册"""
+        r = client.post("/api/v1/auth/register", json={
+            "username": "rootroot",
+            "password": "whatever",
+            "gender": "unknown",
+        })
+        assert r.status_code in (400, 422)
 
 
 class TestAdmin:

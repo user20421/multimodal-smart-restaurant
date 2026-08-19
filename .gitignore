@@ -20,6 +20,10 @@ node_modules/
 frontend/dist/
 *.local
 
+# 部署用临时压缩包
+backend.zip
+frontend/dist.zip
+
 # Environment variables
 backend/.env
 .env

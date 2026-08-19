@@ -22,6 +22,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/admin/menu', name: 'AdminMenu', component: () => import('@/modules/admin/views/AdminMenuView.vue'), meta: { role: 'admin' } },
   { path: '/admin/orders', name: 'AdminOrders', component: () => import('@/modules/admin/views/AdminOrdersView.vue'), meta: { role: 'admin' } },
   { path: '/admin/pending-orders', name: 'AdminPendingOrders', component: () => import('@/modules/admin/views/AdminPendingOrdersView.vue'), meta: { role: 'admin' } },
+  { path: '/superadmin', name: 'SuperAdmin', component: () => import('@/views/SuperAdminView.vue'), meta: { role: 'superadmin' } },
   { path: '/:pathMatch(.*)*', name: 'NotFound', redirect: '/chat' },
 ]
 
@@ -34,24 +35,29 @@ router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
   const isLoggedIn = authStore.isLoggedIn
   const isAdmin = authStore.isAdmin
+  const isSuperAdmin = authStore.isSuperAdmin
   const isCustomer = authStore.isCustomer
+
+  // 各角色的首页
+  const homePath = isSuperAdmin ? '/superadmin' : isAdmin ? '/admin' : '/chat'
 
   // 根路径按角色动态重定向
   if (to.path === '/') {
     if (!isLoggedIn) return next('/login')
-    return next(isAdmin ? '/admin' : '/chat')
+    return next(homePath)
   }
 
   if (to.meta.public) {
-    if (isLoggedIn) return next(isAdmin ? '/admin' : '/chat')
+    if (isLoggedIn) return next(homePath)
     return next()
   }
 
   if (!isLoggedIn) return next('/login')
 
   // 角色权限控制
-  if (to.meta.role === 'admin' && !isAdmin) return next('/chat')
-  if (to.meta.role === 'customer' && !isCustomer) return next('/admin')
+  if (to.meta.role === 'admin' && !isAdmin) return next(homePath)
+  if (to.meta.role === 'superadmin' && !isSuperAdmin) return next(homePath)
+  if (to.meta.role === 'customer' && !isCustomer) return next(homePath)
 
   // 检测用户切换：只在用户确实切换时才重载聊天记录
   const currentUserId = authStore.user?.id ?? null

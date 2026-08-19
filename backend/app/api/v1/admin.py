@@ -7,9 +7,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.deps import require_admin
+from app.api.deps import require_admin, require_superadmin
 from app.schemas.menu import MenuItemCreate, MenuItemUpdate, MenuItemOut
 from app.schemas.order import OrderOut, PaginatedOrdersResponse
+from app.services.auth_service import reset_admin_password
 from app.services.menu_service import (
     get_menu_items, create_menu_item, update_menu_item, delete_menu_item, count_menu_items
 )
@@ -23,6 +24,16 @@ from app.services.order_service import (
 from app.utils.pdf_export import build_orders_pdf
 
 router = APIRouter()
+
+
+@router.post("/admin/reset-root-password")
+async def admin_reset_root_password(
+    current_user: dict = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """超级管理员重置管理员 root 的密码为初始值 123456"""
+    await reset_admin_password(db)
+    return {"message": "已将管理员 root 的密码重置为初始值 123456，下次登录后需修改密码"}
 
 
 @router.get("/admin/dashboard")

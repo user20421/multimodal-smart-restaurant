@@ -45,6 +45,9 @@ export function deleteMenuItem(id: number) {
 }
 
 // Orders management
+export function resetRootPassword() {
+  return api.post<{ message: string }>('/admin/reset-root-password')
+}
 export interface AdminPaginationParams {
   page?: number
   page_size?: number

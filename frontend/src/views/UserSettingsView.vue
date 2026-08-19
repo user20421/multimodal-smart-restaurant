@@ -234,7 +234,7 @@ watch(faceInputMode, async (mode) => {
 
 const form = reactive({
   username: '',
-  role: 'customer' as 'customer' | 'admin',
+  role: 'customer' as 'customer' | 'admin' | 'superadmin',
   phone: '',
   gender: undefined as 'unknown' | 'male' | 'female' | undefined,
   birth_date: '',

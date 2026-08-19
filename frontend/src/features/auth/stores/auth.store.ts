@@ -43,6 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => !!auth.value && !!token.value)
   const user = computed(() => auth.value)
   const isAdmin = computed(() => auth.value?.role === 'admin')
+  const isSuperAdmin = computed(() => auth.value?.role === 'superadmin')
   const isCustomer = computed(() => auth.value?.role === 'customer')
   const userId = computed(() => auth.value?.id ?? null)
   const needChangePassword = computed(() => auth.value?.need_change_password ?? false)
@@ -77,7 +78,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { auth, token, isLoggedIn, user, isAdmin, isCustomer, userId, needChangePassword, setAuth, logout, clearNeedChangePassword }
+  return { auth, token, isLoggedIn, user, isAdmin, isSuperAdmin, isCustomer, userId, needChangePassword, setAuth, logout, clearNeedChangePassword }
 })
 
 export type { UserRole }

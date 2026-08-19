@@ -20,19 +20,19 @@ export interface RegisterPayload {
   username: string
   password: string
   phone?: string
-  gender?: 'male' | 'female'
+  gender?: 'unknown' | 'male' | 'female'
   birth_date?: string
   role?: 'customer' | 'admin'
 }
 
 export interface ProfileUpdatePayload {
   phone?: string
-  gender?: 'male' | 'female'
+  gender?: 'unknown' | 'male' | 'female'
   birth_date?: string
 }
 
 export interface ChangePasswordPayload {
-  old_password: string
+  old_password?: string  // 首次强制改密场景可不传
   new_password: string
 }
 

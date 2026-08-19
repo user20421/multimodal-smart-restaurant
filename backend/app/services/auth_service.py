@@ -26,6 +26,9 @@ logger = get_logger(__name__)
 DEFAULT_ADMIN_USERNAME = "root"
 DEFAULT_ADMIN_PASSWORD = "123456"
 
+# 超级管理员账号（由项目根目录 init.sql 创建，仅用于重置管理员密码）
+SUPER_ADMIN_USERNAME = "rootroot"
+
 
 def create_access_token(user_id: int, role: str) -> str:
     """生成 JWT 访问令牌"""
@@ -56,7 +59,7 @@ def _is_default_admin_credentials(username: str, password: str) -> bool:
 
 async def register_user(db: AsyncSession, data: UserRegister) -> UserOut:
     """用户注册（首次注册不强制录入人脸）"""
-    if data.username in ("admin", "管理员", DEFAULT_ADMIN_USERNAME):
+    if data.username in ("admin", "管理员", DEFAULT_ADMIN_USERNAME, SUPER_ADMIN_USERNAME):
         raise BusinessException("该用户名已被系统保留，请更换")
 
     existing = await user_repo.get_by_username(db, data.username)
@@ -107,6 +110,18 @@ async def login_user(db: AsyncSession, data: UserLogin) -> UserOut:
             await db.commit()
 
     return UserOut.model_validate(user)
+
+
+async def reset_admin_password(db: AsyncSession) -> None:
+    """重置管理员 root 的密码为初始值 123456（仅超级管理员可调用）。"""
+    user = await user_repo.get_by_username(db, DEFAULT_ADMIN_USERNAME)
+    if not user:
+        raise BusinessException("管理员账号 root 不存在")
+    user.password = _hash_password(DEFAULT_ADMIN_PASSWORD)
+    user.role = "admin"
+    user.need_change_password = True  # 下次以初始密码登录后强制修改
+    await db.commit()
+    logger.info("[Auth] 超级管理员已将 root 密码重置为初始值")
 
 
 async def change_password(
