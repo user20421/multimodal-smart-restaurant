@@ -48,6 +48,26 @@ export function deleteMenuItem(id: number) {
 export function resetRootPassword() {
   return api.post<{ message: string }>('/admin/reset-root-password')
 }
+
+// 超级管理员：用户聊天次数管理
+export interface UserQuota {
+  id: number
+  username: string
+  chat_quota: number
+  created_at?: string | null
+}
+
+export function fetchUserQuotas() {
+  return api.get<UserQuota[]>('/admin/user-quotas')
+}
+
+export function rechargeUserQuota(userId: number) {
+  return api.post<{ message: string; chat_quota: number }>(`/admin/user-quotas/${userId}/recharge`)
+}
+
+export function deleteUser(userId: number) {
+  return api.delete<{ message: string }>(`/admin/users/${userId}`)
+}
 export interface AdminPaginationParams {
   page?: number
   page_size?: number

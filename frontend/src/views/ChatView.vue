@@ -610,7 +610,19 @@ async function sendMessage() {
     }
   } catch (err) {
     interruptThis()
-    if (assistantIndex >= 0) {
+    const errMsg = err instanceof Error ? err.message : ''
+    if (errMsg.includes('聊天次数不足')) {
+      // 次数耗尽：移除占位的空助手消息，弹窗提示
+      if (assistantIndex >= 0) {
+        const list = [...messages.value]
+        list.splice(assistantIndex, 1)
+        chatStore.setMessages(list)
+      }
+      ElMessageBox.alert('您的智能聊天次数不足，请联系开发人员', '提示', {
+        confirmButtonText: '知道了',
+        type: 'warning',
+      })
+    } else if (assistantIndex >= 0) {
       chatStore.updateMessage(assistantIndex, { role: 'assistant', content: '抱歉，服务暂时异常，请稍后重试。' })
     } else {
       chatStore.addMessage({ role: 'assistant', content: '抱歉，服务暂时异常，请稍后重试。' })

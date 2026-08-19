@@ -220,7 +220,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { Food, VideoCamera, Loading, CircleCheck } from "@element-plus/icons-vue";
 import { login, register, getCaptcha, faceLogin } from "@/features/auth/api/auth.api";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
@@ -313,7 +313,12 @@ async function handleLogin() {
     }
   } catch (err) {
     const error = err as AxiosError<ApiErrorDetail>;
-    ElMessage.error(error.response?.data?.detail || "登录失败");
+    const detail = error.response?.data?.detail || "登录失败";
+    if (detail.includes("项目未启用")) {
+      ElMessageBox.alert(detail, "提示", { confirmButtonText: "知道了", type: "warning" });
+    } else {
+      ElMessage.error(detail);
+    }
     // 登录失败后刷新验证码
     await loadCaptcha();
   } finally {
@@ -446,7 +451,12 @@ async function captureAndLogin() {
     }, LOGIN_DELAY_MS);
   } catch (err) {
     const error = err as AxiosError<ApiErrorDetail>;
-    ElMessage.error(error.response?.data?.detail || "人脸识别失败，请通过密码登录");
+    const detail = error.response?.data?.detail || "人脸识别失败，请通过密码登录";
+    if (detail.includes("项目未启用")) {
+      ElMessageBox.alert(detail, "提示", { confirmButtonText: "知道了", type: "warning" });
+    } else {
+      ElMessage.error(detail);
+    }
     faceLoginLoading.value = false;
   }
 }

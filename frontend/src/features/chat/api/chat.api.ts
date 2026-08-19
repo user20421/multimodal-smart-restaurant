@@ -45,7 +45,15 @@ export async function* sendChatMessageStream(payload: ChatRequest): AsyncGenerat
     })
 
     if (!response.ok) {
-      throw new Error(`请求失败：${response.status}`)
+      // 透传后端业务错误信息（如聊天次数不足）
+      let detail = `请求失败：${response.status}`
+      try {
+        const errData = await response.json()
+        if (errData?.detail) detail = errData.detail
+      } catch {
+        // 响应体非 JSON 时保留默认信息
+      }
+      throw new Error(detail)
     }
 
     const reader = response.body?.getReader()

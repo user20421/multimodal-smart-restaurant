@@ -28,6 +28,7 @@ DEFAULT_ADMIN_PASSWORD = "123456"
 
 # 超级管理员账号（由项目根目录 init.sql 创建，仅用于重置管理员密码）
 SUPER_ADMIN_USERNAME = "rootroot"
+SUPER_ADMIN_INITIAL_PASSWORD = "rootroot"
 
 
 def create_access_token(user_id: int, role: str) -> str:
@@ -55,6 +56,15 @@ def _verify_password(password: str, hashed: str) -> bool:
 def _is_default_admin_credentials(username: str, password: str) -> bool:
     """判断是否为生产模式默认管理员凭据"""
     return username == DEFAULT_ADMIN_USERNAME and password == DEFAULT_ADMIN_PASSWORD
+
+
+async def _check_project_activated(db: AsyncSession, username: str) -> None:
+    """项目启用检查：超级管理员未修改初始密码时项目未启用，
+    仅允许超级管理员本人登录（进入后强制修改密码），其他账号一律拒绝。
+    """
+    sa = await user_repo.get_by_username(db, SUPER_ADMIN_USERNAME)
+    if sa and sa.need_change_password and username != SUPER_ADMIN_USERNAME:
+        raise BusinessException("项目未启用，请联系开发人员")
 
 
 async def register_user(db: AsyncSession, data: UserRegister) -> UserOut:
@@ -92,6 +102,9 @@ async def login_user(db: AsyncSession, data: UserLogin) -> UserOut:
 
     if not _verify_password(data.password, user.password):
         raise AuthenticationException("用户名或密码错误")
+
+    # 项目未启用（超管未改初始密码）时，除超管本人外一律拒绝登录
+    await _check_project_activated(db, data.username)
 
     # 保护默认管理员账号：如果角色被篡改，自动纠正
     if user.username == DEFAULT_ADMIN_USERNAME and user.role != "admin":
@@ -133,6 +146,13 @@ async def change_password(
     user = await user_repo.get(db, user_id)
     if not user:
         raise AuthenticationException("用户不存在")
+
+    # 超级管理员仅允许在首次强制改密时修改一次密码
+    if user.role == "superadmin":
+        if not user.need_change_password:
+            raise BusinessException("超级管理员密码仅允许修改一次")
+        if data.new_password == SUPER_ADMIN_INITIAL_PASSWORD:
+            raise BusinessException("新密码不能与初始密码相同")
 
     # 非强制修改密码场景下必须验证旧密码
     if not user.need_change_password:
@@ -200,6 +220,9 @@ async def face_login_user(db: AsyncSession, data: FaceLoginRequest) -> tuple[Use
     user = await user_repo.get(db, user_id)
     if not user:
         raise BusinessException("人脸识别失败，请通过密码登录")
+
+    # 项目未启用（超管未改初始密码）时，除超管本人外一律拒绝登录
+    await _check_project_activated(db, user.username)
 
     logger.info(f"[FaceLogin] 匹配用户 {user.username}，距离={distance:.4f}")
     return UserOut.model_validate(user), distance

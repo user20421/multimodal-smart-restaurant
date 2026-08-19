@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `need_change_password` TINYINT(1) DEFAULT 0 COMMENT '是否需要强制修改密码',
     `face_encoding` JSON DEFAULT NULL COMMENT '人脸特征向量（128维）',
     `face_image_url` VARCHAR(255) DEFAULT NULL COMMENT '人脸照片URL',
+    `chat_quota` INT NOT NULL DEFAULT 100 COMMENT '智能聊天剩余次数（普通用户初始100）',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -91,9 +92,9 @@ CREATE TABLE IF NOT EXISTS `order_items` (
 INSERT IGNORE INTO `users` (`username`, `password`, `role`, `phone`, `gender`, `birth_date`, `need_change_password`) VALUES
     ('root', '$2b$12$fkZCE7zgWfpcQ5I2gJjgceTujP086R9VLDE6Ic5.5orr8lpcmia3C', 'admin', '13800138000', NULL, NULL, 1);
 
--- 超级管理员账号（rootroot / rootroot，仅用于重置管理员密码）
+-- 超级管理员账号（rootroot / rootroot，仅用于重置管理员密码与管理用户聊天次数；首次登录强制改密且仅允许修改一次）
 INSERT IGNORE INTO `users` (`username`, `password`, `role`, `phone`, `gender`, `birth_date`, `need_change_password`) VALUES
-    ('rootroot', '$2b$12$G06JvPN3kWwWGEevfUOb2OusydJtNshIFmBbeouyk/BGDXIZ6yXu6', 'superadmin', NULL, NULL, NULL, 0);
+    ('rootroot', '$2b$12$G06JvPN3kWwWGEevfUOb2OusydJtNshIFmBbeouyk/BGDXIZ6yXu6', 'superadmin', NULL, NULL, NULL, 1);
 
 -- 菜单分类
 INSERT IGNORE INTO `menu_categories` (`name`, `sort_order`, `description`) VALUES

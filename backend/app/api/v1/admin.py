@@ -11,6 +11,8 @@ from app.api.deps import require_admin, require_superadmin
 from app.schemas.menu import MenuItemCreate, MenuItemUpdate, MenuItemOut
 from app.schemas.order import OrderOut, PaginatedOrdersResponse
 from app.services.auth_service import reset_admin_password
+from app.ai import quota as chat_quota
+from app.ai import chat_store
 from app.services.menu_service import (
     get_menu_items, create_menu_item, update_menu_item, delete_menu_item, count_menu_items
 )
@@ -34,6 +36,38 @@ async def admin_reset_root_password(
     """超级管理员重置管理员 root 的密码为初始值 123456"""
     await reset_admin_password(db)
     return {"message": "已将管理员 root 的密码重置为初始值 123456，下次登录后需修改密码"}
+
+
+@router.get("/admin/user-quotas")
+async def admin_list_user_quotas(
+    current_user: dict = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """超级管理员查看全部普通用户的智能聊天剩余次数"""
+    return await chat_quota.list_customer_quotas(db)
+
+
+@router.post("/admin/user-quotas/{user_id}/recharge")
+async def admin_recharge_user_quota(
+    user_id: int,
+    current_user: dict = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """超级管理员为普通用户充值 100 次智能聊天次数"""
+    new_quota = await chat_quota.recharge_quota(db, user_id)
+    return {"message": f"已充值 100 次，当前剩余 {new_quota} 次", "chat_quota": new_quota}
+
+
+@router.delete("/admin/users/{user_id}")
+async def admin_delete_user(
+    user_id: int,
+    current_user: dict = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """超级管理员删除普通用户（级联删除其订单与 MongoDB 聊天记录）"""
+    username = await chat_quota.delete_customer(db, user_id)
+    await chat_store.clear_history(user_id)
+    return {"message": f"已删除用户 {username}"}
 
 
 @router.get("/admin/dashboard")

@@ -18,6 +18,7 @@ from app.core.database import get_db
 from app.core.logging_config import get_logger
 from app.ai import chat_store
 from app.ai import config as ai_config
+from app.ai import quota
 from app.ai.agent import fastpath
 from app.ai.agent.context import AgentContext
 from app.ai.agent.graph import run_graph, stream_graph
@@ -126,6 +127,10 @@ async def ai_chat(
 
     user_id = current_user["id"]
 
+    # 普通用户每次发送扣减一次聊天次数（为 0 时抛业务异常，前端弹窗提示）
+    if current_user.get("role") == "customer":
+        await quota.consume_quota(db, user_id)
+
     # 图片搜菜分支（视觉 + 对话模型均不可用时直接兜底）
     if data.image_base64:
         if not (_zhipu_ready() and _bailian_ready()):
@@ -179,6 +184,9 @@ async def ai_chat_stream(
         # 默认回显请求购物车；文本分支会切换为 ctx.cart（含 AI 的修改）
         final_cart = data.cart
         user_content = data.message or ("[图片搜菜]" if data.image_base64 else "")
+        # 普通用户每次发送扣减一次聊天次数（为 0 时抛业务异常，前端弹窗提示）
+        if current_user.get("role") == "customer":
+            await quota.consume_quota(db, user_id)
         try:
             if not data.message.strip() and not data.image_base64:
                 text = "请问有什么可以帮您？"

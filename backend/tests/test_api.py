@@ -326,3 +326,171 @@ class TestAdmin:
         token = login_and_get_token(test_uname)
         r = client.get("/api/v1/admin/menu", headers=auth_headers(token))
         assert r.status_code == 403
+
+
+class TestChatQuota:
+    """智能聊天次数配额 + 超级管理员用户管理"""
+
+    @staticmethod
+    def _register_and_token() -> tuple[str, str]:
+        import uuid
+        uname = f"quota_{uuid.uuid4().hex[:8]}"
+        register_user(uname)
+        return uname, login_and_get_token(uname)
+
+    @staticmethod
+    def _set_quota(username: str, n: int):
+        import asyncio
+
+        async def _update():
+            from sqlalchemy import select
+            from app.models.user import User
+            async with TestSessionLocal() as db:
+                result = await db.execute(select(User).where(User.username == username))
+                user = result.scalar_one()
+                user.chat_quota = n
+                await db.commit()
+
+        asyncio.run(_update())
+
+    def test_chat_consumes_quota(self):
+        """普通用户发送一次智能聊天，剩余次数 -1"""
+        uname, token = self._register_and_token()
+        r = client.post(
+            "/api/v1/ai/chat",
+            json={"message": "清空购物车", "cart": []},
+            headers=auth_headers(token),
+        )
+        assert r.status_code == 200, r.text
+
+        sa_token = login_and_get_token("rootroot", "rootroot")
+        r = client.get("/api/v1/admin/user-quotas", headers=auth_headers(sa_token))
+        assert r.status_code == 200
+        item = next(i for i in r.json() if i["username"] == uname)
+        assert item["chat_quota"] == 99
+
+    def test_quota_exhausted_returns_400(self):
+        """次数为 0 时发送，返回 400 及提示文案"""
+        uname, token = self._register_and_token()
+        self._set_quota(uname, 0)
+        r = client.post(
+            "/api/v1/ai/chat",
+            json={"message": "清空购物车", "cart": []},
+            headers=auth_headers(token),
+        )
+        assert r.status_code == 422
+        assert "聊天次数不足" in r.json()["detail"]
+
+    def test_recharge_and_delete_user(self):
+        """超管充值 100 次、删除用户；普通管理员无权操作"""
+        uname, _ = self._register_and_token()
+        sa_token = login_and_get_token("rootroot", "rootroot")
+
+        quotas = client.get("/api/v1/admin/user-quotas", headers=auth_headers(sa_token)).json()
+        uid = next(i["id"] for i in quotas if i["username"] == uname)
+
+        r = client.post(f"/api/v1/admin/user-quotas/{uid}/recharge", headers=auth_headers(sa_token))
+        assert r.status_code == 200
+        assert r.json()["chat_quota"] == 200
+
+        admin_token = login_and_get_token("root", "123456")
+        r = client.get("/api/v1/admin/user-quotas", headers=auth_headers(admin_token))
+        assert r.status_code == 403
+
+        r = client.delete(f"/api/v1/admin/users/{uid}", headers=auth_headers(sa_token))
+        assert r.status_code == 200
+        quotas = client.get("/api/v1/admin/user-quotas", headers=auth_headers(sa_token)).json()
+        assert all(i["username"] != uname for i in quotas)
+
+    def test_superadmin_change_password_only_once(self):
+        """超级管理员首次强制改密后，不允许再次修改；且新密码不得与初始密码相同"""
+        import asyncio
+        import uuid
+        from app.models.user import User
+        from app.services.auth_service import _hash_password
+
+        uname = f"sa_{uuid.uuid4().hex[:8]}"
+
+        async def _create():
+            async with TestSessionLocal() as db:
+                db.add(User(
+                    username=uname,
+                    password=_hash_password("oldpass1"),
+                    role="superadmin",
+                    need_change_password=True,
+                ))
+                await db.commit()
+
+        asyncio.run(_create())
+
+        token = login_and_get_token(uname, "oldpass1")
+
+        # 新密码与初始密码 rootroot 相同，被拒绝
+        r = client.post(
+            "/api/v1/auth/change-password",
+            json={"new_password": "rootroot"},
+            headers=auth_headers(token),
+        )
+        assert r.status_code == 422
+
+        # 首次强制改密（不传旧密码）
+        r = client.post(
+            "/api/v1/auth/change-password",
+            json={"new_password": "newpass123"},
+            headers=auth_headers(token),
+        )
+        assert r.status_code == 200, r.text
+
+        # 第二次修改被拒绝（仅允许一次）
+        r = client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": "newpass123", "new_password": "another123"},
+            headers=auth_headers(token),
+        )
+        assert r.status_code == 422
+
+    def test_project_not_activated_gate(self):
+        """超管未改初始密码时项目未启用：其他人登录被拒，仅超管本人可登录"""
+        import asyncio
+        import uuid
+        from sqlalchemy import select
+        from app.models.user import User
+
+        async def _set_flag(value: bool):
+            async with TestSessionLocal() as db:
+                result = await db.execute(select(User).where(User.username == "rootroot"))
+                sa = result.scalar_one()
+                sa.need_change_password = value
+                await db.commit()
+
+        asyncio.run(_set_flag(True))
+        try:
+            # 普通用户登录被拒
+            uname = f"gate_{uuid.uuid4().hex[:8]}"
+            register_user(uname)
+            captcha_id, code = get_captcha_code()
+            r = client.post("/api/v1/auth/login", json={
+                "username": uname,
+                "password": "123456",
+                "captcha_id": captcha_id,
+                "captcha_code": code,
+            })
+            assert r.status_code == 422
+            assert "项目未启用" in r.json()["detail"]
+
+            # 管理员 root 登录同样被拒
+            captcha_id, code = get_captcha_code()
+            r = client.post("/api/v1/auth/login", json={
+                "username": "root",
+                "password": "123456",
+                "captcha_id": captcha_id,
+                "captcha_code": code,
+            })
+            assert r.status_code == 422
+            assert "项目未启用" in r.json()["detail"]
+
+            # 超级管理员本人可登录（进入后强制改密）
+            token = login_and_get_token("rootroot", "rootroot")
+            assert token
+        finally:
+            asyncio.run(_set_flag(False))
