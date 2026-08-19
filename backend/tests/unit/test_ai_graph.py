@@ -18,15 +18,19 @@ from app.ai.sanitize import sanitize_reply, strip_emoji
         ("order", "order"),
         ("knowledge", "knowledge"),
         ("chitchat", "chitchat"),
+        ("manager", "manager"),
         ("unclear", "unclear"),
         ("cart。", "cart"),
         (" order ", "order"),
         ("CART", "cart"),
+        ("MANAGER", "manager"),
         ('"knowledge"', "knowledge"),
+        (" manager ", "manager"),
         # 无法识别 -> 降级 unclear（拿不准就不办）
         ("随便", "unclear"),
         ("", "unclear"),
         ("我认为是cart", "cart"),  # 包含匹配兜底
+        ("我认为是manager", "manager"),  # 包含匹配兜底
     ],
 )
 def test_parse_route(text, expected):

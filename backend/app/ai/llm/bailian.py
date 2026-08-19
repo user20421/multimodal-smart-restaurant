@@ -30,3 +30,21 @@ def get_chat_llm(streaming: bool = False) -> ChatOpenAI:
         streaming=streaming,
         extra_body={"enable_thinking": False},
     )
+
+
+def get_chat_llm_x(streaming: bool = False) -> ChatOpenAI:
+    """获取百炼更强模型实例（"餐厅经理"混合意图专用，BAILIAN_LLM_MODEL_X）。
+
+    与基础模型的差异：不传 enable_thinking。实测（2026-08-20 探针验证）当前
+    qwen3.7-plus 是混合思考模型且默认开启思考，但与模型 A 不同——其思考链输出在
+    独立的 reasoning_content 字段、绝不混入 content，无泄漏问题；经理节点做的是
+    多工具编排规划，保留思考可保住任务拆解质量（实测 enable_thinking=false 后
+    模型明显降智，简单比较题都会答错），故维持默认开启。
+    若未来换成会泄漏思考链的模型，可仿照 get_chat_llm 在 extra_body 中处理。
+    """
+    return ChatOpenAI(
+        model=config.BAILIAN_LLM_MODEL_X,
+        api_key=config.BAILIAN_API_KEY,
+        base_url=config.BAILIAN_BASE_URL,
+        streaming=streaming,
+    )

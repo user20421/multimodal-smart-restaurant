@@ -2,11 +2,12 @@
 多智能体图编排（L2）
 
 结构：
-    START -> router（LLM 分类节点，只看本句，输出五类标签）
+    START -> router（LLM 分类节点，只看本句，输出六类标签）
           -> cart_node      购物车专员（带历史；写操作由提示词强约束只能依据本句）
           -> order_node     订单专员（只读查询，带历史以理解"那笔订单"等指代）
           -> knowledge_node 资讯顾问（只读，可带历史）
           -> chitchat_node  闲聊节点（无工具，可带历史）
+          -> manager_node   餐厅经理（混合意图，全工具，更强模型 BAILIAN_LLM_MODEL_X）
           -> unclear_node   固定话术：请用户说清楚
 
 设计要点：
@@ -27,6 +28,7 @@ from app.ai.agent.prompts import (
     CART_AGENT_PROMPT,
     CHITCHAT_PROMPT,
     KNOWLEDGE_AGENT_PROMPT,
+    MANAGER_PROMPT,
     ORDER_AGENT_PROMPT,
     ROUTER_PROMPT,
 )
@@ -34,7 +36,7 @@ from app.ai.agent.tools.cart_tools import build_cart_tools, cart_summary_text
 from app.ai.agent.tools.menu_tools import build_menu_tools
 from app.ai.agent.tools.order_tools import build_order_tools, build_place_order_tool
 from app.ai.agent.tools.rag_tool import build_rag_tools
-from app.ai.llm.bailian import get_chat_llm
+from app.ai.llm.bailian import get_chat_llm, get_chat_llm_x
 
 # 工具开始执行时的状态提示（SSE status 事件，不使用表情符号）
 _TOOL_STATUS_TEXT = {
@@ -51,9 +53,13 @@ _TOOL_STATUS_TEXT = {
 }
 
 # 允许向用户流式输出 token 的节点（router 的分类 token 绝不外泄）
-_STREAM_NODES = {"cart_node", "order_node", "knowledge_node", "chitchat_node"}
+_STREAM_NODES = {"cart_node", "order_node", "knowledge_node", "chitchat_node", "manager_node"}
 
-_ROUTES = ("cart", "order", "knowledge", "chitchat", "unclear")
+_ROUTES = ("cart", "order", "knowledge", "chitchat", "manager", "unclear")
+
+# 经理节点的图递归步数上限（每次工具调用约占 2 步）：混合意图通常 3~5 次工具调用，
+# 20 步足够覆盖且能防止模型异常时的工具调用死循环（控制成本与耗时）
+_MANAGER_RECURSION_LIMIT = 20
 
 UNCLEAR_REPLY = (
     "抱歉，我没有完全理解您的需求。"
@@ -129,6 +135,19 @@ def build_graph(ctx: AgentContext):
         [*build_menu_tools(ctx), *build_rag_tools(ctx)],
         system_prompt=KNOWLEDGE_AGENT_PROMPT,
     )
+    # 餐厅经理：混合意图专用，装备全部专员的工具，使用更强模型（BAILIAN_LLM_MODEL_X）。
+    # 写操作硬约束由工具闭包内的 guard_write_op 等确定性校验保证，与专员一致。
+    manager_agent = create_agent(
+        get_chat_llm_x(streaming=True),
+        [
+            *build_menu_tools(ctx),
+            *build_cart_tools(ctx),
+            *build_place_order_tool(ctx),
+            *build_order_tools(ctx),
+            *build_rag_tools(ctx),
+        ],
+        system_prompt=MANAGER_PROMPT,
+    )
 
     async def router_node(state: GraphState) -> dict:
         """LLM 分类：只看当前这句话，拿不准就是 unclear。"""
@@ -177,6 +196,20 @@ def build_graph(ctx: AgentContext):
             parts.append(_normalize_content(chunk.content))
         return {"reply": "".join(parts)}
 
+    async def manager_node(state: GraphState) -> dict:
+        # 餐厅经理：带历史（查询可理解指代）+ 购物车快照上下文；
+        # 写操作只依据本句（提示词强约束 + 工具层硬校验双重保证）；
+        # recursion_limit 限制工具调用预算，防止异常死循环
+        messages = [
+            *_history_to_messages(state["history"]),
+            _cart_context_message(ctx, state["message"]),
+        ]
+        result = await manager_agent.ainvoke(
+            {"messages": messages},
+            config={"recursion_limit": _MANAGER_RECURSION_LIMIT},
+        )
+        return {"reply": _normalize_content(result["messages"][-1].content)}
+
     async def unclear_node(state: GraphState) -> dict:
         return {"reply": UNCLEAR_REPLY}
 
@@ -186,6 +219,7 @@ def build_graph(ctx: AgentContext):
             "order": "order_node",
             "knowledge": "knowledge_node",
             "chitchat": "chitchat_node",
+            "manager": "manager_node",
         }.get(state["route"], "unclear_node")
 
     graph = StateGraph(GraphState)
@@ -194,10 +228,18 @@ def build_graph(ctx: AgentContext):
     graph.add_node(order_node)
     graph.add_node(knowledge_node)
     graph.add_node(chitchat_node)
+    graph.add_node(manager_node)
     graph.add_node(unclear_node)
     graph.add_edge(START, "router_node")
     graph.add_conditional_edges("router_node", _route_edge)
-    for node in ("cart_node", "order_node", "knowledge_node", "chitchat_node", "unclear_node"):
+    for node in (
+        "cart_node",
+        "order_node",
+        "knowledge_node",
+        "chitchat_node",
+        "manager_node",
+        "unclear_node",
+    ):
         graph.add_edge(node, END)
     return graph.compile()
 

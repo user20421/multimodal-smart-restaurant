@@ -7,6 +7,7 @@ Agent 提示词加载器
 - order.md      订单专员（下单/查单，仅依据本句）
 - knowledge.md  资讯顾问（只读咨询，可结合历史）
 - chitchat.md   闲聊（引回餐厅话题）
+- manager.md    餐厅经理（混合意图，全工具，更强模型，仅依据本句执行写操作）
 """
 from pathlib import Path
 
@@ -22,3 +23,4 @@ CART_AGENT_PROMPT = _load("cart")
 ORDER_AGENT_PROMPT = _load("order")
 KNOWLEDGE_AGENT_PROMPT = _load("knowledge")
 CHITCHAT_PROMPT = _load("chitchat")
+MANAGER_PROMPT = _load("manager")

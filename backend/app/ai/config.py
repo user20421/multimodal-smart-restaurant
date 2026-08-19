@@ -60,6 +60,14 @@ IS_SERVER = _get_config("IS_SERVER", "false").lower() in ("1", "true", "yes")
 # 阿里云百炼（DashScope）大语言模型
 BAILIAN_API_KEY = _get_key("DASHSCOPE_API_KEY")
 BAILIAN_LLM_MODEL = _get_env_file_value("BAILIAN_LLM_MODEL")
+# 更强模型（"餐厅经理"混合意图专用）：与 BAILIAN_LLM_MODEL 强绑定，
+# 配置了对话模型就必须同时配置本项，否则启动即报错，不做降级（项目约定）。
+BAILIAN_LLM_MODEL_X = _get_env_file_value("BAILIAN_LLM_MODEL_X")
+if BAILIAN_LLM_MODEL and not BAILIAN_LLM_MODEL_X:
+    raise RuntimeError(
+        "[AI Config] 已配置 BAILIAN_LLM_MODEL 但缺少 BAILIAN_LLM_MODEL_X："
+        "混合意图路由依赖更强模型，请在 backend/.env 中补齐（不做降级）。"
+    )
 BAILIAN_BASE_URL = _get_config(
     "BAILIAN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
 )

@@ -9,6 +9,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 测试覆盖率产物（启用 pytest-cov 时生成）
+.coverage
+coverage.xml
+htmlcov/
 
 # Virtual environments
 .venv/

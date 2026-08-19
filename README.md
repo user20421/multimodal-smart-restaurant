@@ -51,7 +51,7 @@
 | 导出   | reportlab（PDF）                                                |
 | 人脸识别 | face_recognition（dlib）                                       |
 | AI 框架 | LangChain 1.3 + LangGraph（Agent 运行时）                        |
-| 大语言模型 | 阿里云百炼 deepseek-v4-flash（OpenAI 兼容接口，已关闭思考模式）|
+| 大语言模型 | 阿里云百炼 deepseek-v4-flash（OpenAI 兼容接口，已关闭思考模式）；混合意图"餐厅经理"专用更强模型 qwen3.7-plus（`BAILIAN_LLM_MODEL_X`）|
 | 视觉模型 | 智谱 GLM-4V-Flash（图片搜菜）                                    |
 | 向量模型 | 智谱 Embedding-3（512 维）+ Chroma 向量库 + 轻量 BM25 混合检索   |
 
@@ -160,7 +160,7 @@ python scripts/start.py --prod
 
 ```
 multimodal-smart-restaurant/
-├── scripts/                  # 一键启动、连通性测试脚本、init.sql 数据库初始化脚本
+├── scripts/                  # 一键启动、init.sql 初始化、AI 连通性/路由校准/经理冒烟测试脚本
 ├── README.md
 ├── .gitignore
 ├── backend/                  # FastAPI 后端
@@ -175,23 +175,23 @@ multimodal-smart-restaurant/
 │   │   ├── utils/            # 工具（文本格式化、PDF 导出）
 │   │   └── ai/               # 智能聊天模块（独立子目录，传统代码只被调用不被修改）
 │   │       ├── router.py     # /api/v1/ai/chat、/chat/stream（SSE 流式）
-│   │       ├── config.py     # AI 配置读取（.env 优先，环境变量兜底，占位符视为未设置）
+│   │       ├── config.py     # AI 配置读取（.env 优先，环境变量兜底，占位符视为未设置；双模型强绑定校验）
 │   │       ├── schemas.py    # AI 模块请求/响应模型
 │   │       ├── image_search.py  # 图片搜菜：视觉识别 + 菜单比对
 │   │       ├── chat_store.py   # 聊天历史持久化（MongoDB，必需依赖，启动强校验）
 │   │       ├── sanitize.py     # 输出净化（确定性移除表情符号与“（微笑）”类舞台指示）
-│   │       ├── llm/          # 模型客户端（bailian.py 文本对话 / zhipu.py 视觉）
+│   │       ├── llm/          # 模型客户端（bailian.py 文本对话，基础+更强双模型工厂 / zhipu.py 视觉）
 │   │       ├── rag/          # RAG 知识库（loader/retriever/manager/sync_dishes）
 │   │       │   ├── data/     # 知识文档（store/dishes/faq/policy，dishes 由数据库同步生成）
 │   │       │   └── vectorstore/   # Chroma 持久化产物（运行生成，不提交）
 │   │       └── agent/        # 点餐多智能体（分级意图路由）
 │   │           ├── fastpath.py    # L1 正则快速路：整句完全匹配的简单意图确定性处理（加/减/换菜、清空、下单、查订单）
-│   │           ├── graph.py       # L2 LangGraph 多智能体图：router 分类节点 -> 购物车/订单/资讯/闲聊专员
-│   │           ├── prompts/       # 各角色提示词（router/cart/order/knowledge/chitchat.md）
+│   │           ├── graph.py       # L2 LangGraph 多智能体图：router 分类节点 -> 购物车/订单/资讯/闲聊专员 + 餐厅经理（混合意图）
+│   │           ├── prompts/       # 各角色提示词（router/cart/order/knowledge/chitchat/manager.md）
 │   │           ├── context.py     # 请求级上下文（db / user_id / 购物车快照）
 │   │           └── tools/         # 工具层（菜单检索 / 购物车增删改 / 下单与订单查询 / RAG 检索）
 │   ├── static/               # 静态资源目录（保留挂载，当前无内容）
-│   ├── tests/                # 测试用例（API 测试 + 订单服务/AI 智能体单元测试）
+│   ├── tests/                # 测试用例（API 测试 + 订单服务/AI 智能体/AI 配置单元测试）
 │   ├── .env                  # 环境变量（不提交）
 │   ├── pyproject.toml        # 项目元数据与 ruff/mypy 配置
 │   └── requirements.txt      # 后端依赖（固定版本）
@@ -239,7 +239,7 @@ multimodal-smart-restaurant/
 
 独立子目录 `backend/app/ai/`，与传统后端完全解耦（传统代码只被调用、不被修改）：
 
-- **文本对话**：百炼 deepseek-v4-flash（已用 `enable_thinking=false` 关闭思考模式防思维链泄漏），分级意图路由：L1 正则快速路处理简单确定的意图（如“来三份宫保鸡丁”“清空购物车”“确认下单”“最近5条订单”），不调 LLM；复杂意图进入 L2 多智能体图——router 分类节点（只看本句，拿不准即 unclear 请用户重述）分发到购物车专员（含下单）/ 订单查询专员 / 资讯顾问 / 闲聊节点
+- **文本对话**：百炼 deepseek-v4-flash（已用 `enable_thinking=false` 关闭思考模式防思维链泄漏），分级意图路由：L1 正则快速路处理简单确定的意图（如“来三份宫保鸡丁”“清空购物车”“确认下单”“最近5条订单”），不调 LLM；复杂意图进入 L2 多智能体图——router 分类节点（只看本句）分发到购物车专员（含下单）/ 订单查询专员 / 资讯顾问 / 闲聊节点 / **餐厅经理**；一句话混合多个类别诉求（如“营业时间是什么，再来一份麻婆豆腐和两份宫保鸡丁”）路由到餐厅经理：装备全部专员工具、使用更强模型（`BAILIAN_LLM_MODEL_X`）一站式办妥；写操作同样只认本句（工具层硬校验与专员一致），查询可结合历史；操作过多过杂或矛盾则整体拒绝、走 unclear 请用户拆分说清楚（宁愿不做，不可做错）
 - **对话操作购物车/订单**：工具层复用传统后端服务（只调用不修改），下单由 `order_service.create_order` 服务端校验兜底；**增删改/下单等写操作只依据用户当前这句话**，指代历史内容（如“刚才那个菜再来一份”）一律请用户一句话说清楚，不得猜测执行；工具层另有确定性硬校验（`guard_write_op`）：句中未明确提及的菜品/动作直接拒绝执行，即使上一轮是 AI 给出的选项、用户只回“移除/好的”也不算数；被拒绝时 AI 必须如实说明未执行，不得声称“已下单/已移除”；**查询（购物车/订单/FAQ）为只读，可结合对话历史理解指代**；购物车通过 SSE `done` 事件快照回传前端落地；回复出口确定性移除表情符号与“（微笑）”类舞台指示标注
 - **聊天次数配额**：普通用户初始 100 次发送额度，耗尽弹窗提示“次数不足，请联系开发人员”；超管面板可查看剩余次数并充值（+100/次）
 - **对话历史与滚动摘要**：MongoDB（独立库 `meiwei_ai`）按用户持久化；MongoDB 与 MySQL 同为必需依赖，启动时强校验连通性；原始消息超过 20 条时，后台异步将最旧 10 条压缩为滚动摘要（≤300 字，保留偏好/忌口/菜品/订单结论），进 prompt 时“摘要 + 最近 10 条原文”一起注入；前端“清空对话”会同步删除该用户的全部聊天记录与摘要
@@ -333,10 +333,13 @@ ZHIPU_VISION_MODEL=glm-4v-flash        # 视觉模型（免费）
 # 获取地址: https://bailian.console.aliyun.com/#/api-key
 DASHSCOPE_API_KEY=your-dashscope-api-key-here
 BAILIAN_LLM_MODEL=deepseek-v4-flash-0731
+# 更强模型（混合意图"餐厅经理"专用），与 BAILIAN_LLM_MODEL 强绑定：
+# 配置了 BAILIAN_LLM_MODEL 就必须配置本项，否则后端启动直接报错，不做降级
+BAILIAN_LLM_MODEL_X=qwen3.7-plus-2026-05-26
 BAILIAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
-> AI 连通性验证脚本：`scripts/test_zhipu_embedding.py`、`scripts/test_zhipu_vision.py`、`scripts/test_bailian_llm.py`（自动从 `backend/.env` 读取对应 Key）。
+> AI 连通性验证脚本：`scripts/test_zhipu_embedding.py`、`scripts/test_zhipu_vision.py`、`scripts/test_bailian_llm.py`、`scripts/test_bailian_llm_x.py`（更强模型，含参数兼容性与流式验证）、`scripts/test_router.py`（路由分类边界实测校准）、`scripts/test_manager_agent.py`（餐厅经理端到端冒烟，真实调用模型与数据库）（自动从 `backend/.env` 读取对应 Key）。
 
 ---
 
