@@ -44,14 +44,22 @@ def setup_database():
 
 
 async def _init_db():
+    import app.models  # noqa: F401 确保 Base.metadata 包含所有表
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # 初始化菜单和默认商家账号
-    from app.services.menu_service import init_menu_data
-    from app.services.auth_service import init_admin_user
+    # 插入测试所需的最小数据：1 个分类 + 1 个菜品 + root 管理员
+    from app.models.user import User
+    from app.models.menu import MenuCategory, MenuItem
+    from app.services.auth_service import _hash_password
     async with TestSessionLocal() as db:
-        await init_menu_data(db)
-        await init_admin_user(db)
+        db.add(MenuCategory(name="热销", sort_order=0))
+        db.add(MenuItem(name="宫保鸡丁", price=28.0, category="热销", stock=100))
+        db.add(User(
+            username="root",
+            password=_hash_password("123456"),
+            role="admin",
+            need_change_password=False,
+        ))
         await db.commit()
 
 

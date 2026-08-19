@@ -7,29 +7,8 @@ from typing import List
 from app.repositories.menu_repo import menu_category_repo, menu_item_repo
 from app.schemas.menu import MenuItemCreate, MenuItemUpdate, MenuItemOut
 from app.core.logging_config import get_logger
-from app.core.seed_data import get_menu_items as _load_menu_items, get_menu_categories as _load_menu_categories
 
 logger = get_logger(__name__)
-
-
-async def init_menu_data(db: AsyncSession):
-    """初始化菜单数据"""
-    # 初始化分类
-    for cat_data in _load_menu_categories():
-        existing = await menu_category_repo.get_by_name(db, cat_data["name"])
-        if not existing:
-            await menu_category_repo.create(db, cat_data)
-
-    # 初始化菜品
-    count = 0
-    for item_data in _load_menu_items():
-        existing = await menu_item_repo.get_by_name(db, item_data["name"])
-        if not existing:
-            await menu_item_repo.create(db, item_data)
-            count += 1
-
-    await db.commit()
-    logger.info(f"[Init] 菜单数据初始化完成，新增 {count} 道菜品")
 
 
 async def count_menu_items(db: AsyncSession) -> int:

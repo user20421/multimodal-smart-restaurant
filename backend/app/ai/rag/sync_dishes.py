@@ -14,7 +14,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import AsyncSessionLocal, engine, init_db
+from app.core.database import AsyncSessionLocal, engine
 from app.services import menu_service
 
 DISHES_DIR = Path(__file__).resolve().parent / "data" / "dishes"
@@ -57,7 +57,6 @@ async def sync_dishes(db: AsyncSession) -> int:
 
 
 async def main() -> None:
-    await init_db()
     async with AsyncSessionLocal() as db:
         count = await sync_dishes(db)
     await engine.dispose()

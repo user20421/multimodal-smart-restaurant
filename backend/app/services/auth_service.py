@@ -22,10 +22,9 @@ from app.core.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-# 生产模式默认管理员账号配置
+# 默认管理员账号（由项目根目录 init.sql 创建，登录后强制修改密码）
 DEFAULT_ADMIN_USERNAME = "root"
 DEFAULT_ADMIN_PASSWORD = "123456"
-DEFAULT_ADMIN_PHONE = "13800138000"
 
 
 def create_access_token(user_id: int, role: str) -> str:
@@ -108,44 +107,6 @@ async def login_user(db: AsyncSession, data: UserLogin) -> UserOut:
             await db.commit()
 
     return UserOut.model_validate(user)
-
-
-async def init_admin_user(db: AsyncSession):
-    """
-    初始化默认管理员账号。
-    生产模式默认账号：root / 123456，登录后强制要求修改密码。
-    """
-    changed = False
-
-    # 清理旧的中文/英文管理员账号（如果存在）
-    for old_name in ("admin", "管理员"):
-        old_admin = await user_repo.get_by_username(db, old_name)
-        if old_admin:
-            await user_repo.delete(db, old_admin.id)
-            changed = True
-            logger.info(f"[Init] 已清理旧管理员账号 '{old_name}'，统一使用 '{DEFAULT_ADMIN_USERNAME}'")
-
-    # 确保默认管理员账号存在
-    existing = await user_repo.get_by_username(db, DEFAULT_ADMIN_USERNAME)
-    if not existing:
-        hashed = _hash_password(DEFAULT_ADMIN_PASSWORD)
-        await user_repo.create(db, {
-            "username": DEFAULT_ADMIN_USERNAME,
-            "password": hashed,
-            "role": "admin",
-            "phone": DEFAULT_ADMIN_PHONE,
-            "need_change_password": True,
-        })
-        changed = True
-        logger.info(f"[Init] 默认管理员账号 {DEFAULT_ADMIN_USERNAME}/{DEFAULT_ADMIN_PASSWORD} 已创建，首次登录后请修改密码")
-    elif existing.role != "admin":
-        existing.role = "admin"
-        await db.flush()
-        changed = True
-        logger.info("[Init] 已修复默认管理员账号角色为 admin")
-
-    if changed:
-        await db.commit()
 
 
 async def change_password(

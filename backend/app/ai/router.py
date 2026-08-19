@@ -17,9 +17,11 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.logging_config import get_logger
 from app.ai import chat_store
+from app.ai import config as ai_config
 from app.ai.agent import fastpath
 from app.ai.agent.context import AgentContext
 from app.ai.agent.graph import run_graph, stream_graph
+from app.ai.fallback import FALLBACK_REPLY
 from app.ai.image_search import (
     NOT_FOOD_REPLY,
     analyze_food_image,
@@ -51,12 +53,30 @@ def _make_context(db: AsyncSession, data: AiChatRequest, user_id: int) -> AgentC
     return AgentContext(db=db, user_id=user_id, cart=copy.deepcopy(data.cart))
 
 
+def _bailian_ready() -> bool:
+    """百炼大模型是否可用（API Key 与模型名称均已配置）。"""
+    return bool(ai_config.BAILIAN_API_KEY and ai_config.BAILIAN_LLM_MODEL)
+
+
+def _zhipu_ready() -> bool:
+    """智谱视觉模型是否可用（API Key 与模型名称均已配置）。"""
+    return bool(ai_config.ZHIPU_API_KEY and ai_config.ZHIPU_VISION_MODEL)
+
+
 async def _handle_text(ctx: AgentContext, message: str, history: list) -> str:
-    """文本消息处理（同步）：L1 快速路 -> L2 Agent。"""
+    """文本消息处理（同步）：L1 快速路 -> L2 Agent。大模型不可用时返回友好兜底回复。"""
     reply = await fastpath.try_handle(ctx, message)
     if reply is not None:
         return reply
-    return sanitize_reply(await run_graph(ctx, message, history))
+    if not _bailian_ready():
+        logger.warning("[AI Chat] 未配置百炼 API Key 或模型名称，返回兜底回复")
+        return FALLBACK_REPLY
+    try:
+        return sanitize_reply(await run_graph(ctx, message, history))
+    except Exception as e:
+        # 欠费 / 连接失败 / 模型报错等，兜底不影响传统点餐链路
+        logger.exception(f"[AI Chat] 大模型调用失败，返回兜底回复: {e}")
+        return FALLBACK_REPLY
 
 
 async def _stream_text(ctx: AgentContext, message: str, history: list):
@@ -67,11 +87,20 @@ async def _stream_text(ctx: AgentContext, message: str, history: list):
         for i in range(0, len(reply), _FASTPATH_CHUNK):
             yield {"type": "text", "content": reply[i : i + _FASTPATH_CHUNK]}
         return
-    async for event in stream_graph(ctx, message, history):
-        if event["type"] == "text":
-            event["content"] = sanitize_reply(event["content"])
-        if event["content"]:
-            yield event
+    if not _bailian_ready():
+        logger.warning("[AI ChatStream] 未配置百炼 API Key 或模型名称，返回兜底回复")
+        for i in range(0, len(FALLBACK_REPLY), _FASTPATH_CHUNK):
+            yield {"type": "text", "content": FALLBACK_REPLY[i : i + _FASTPATH_CHUNK]}
+        return
+    try:
+        async for event in stream_graph(ctx, message, history):
+            if event["type"] == "text":
+                event["content"] = sanitize_reply(event["content"])
+            if event["content"]:
+                yield event
+    except Exception as e:
+        logger.exception(f"[AI ChatStream] 大模型调用失败，返回兜底回复: {e}")
+        yield {"type": "text", "content": FALLBACK_REPLY}
 
 
 async def _save_history(user_id: int, user_content: str, assistant_content: str) -> None:
@@ -97,23 +126,34 @@ async def ai_chat(
 
     user_id = current_user["id"]
 
-    # 图片搜菜分支（保持不变）
+    # 图片搜菜分支（视觉 + 对话模型均不可用时直接兜底）
     if data.image_base64:
-        analysis = await analyze_food_image(data.image_base64)
-        if not analysis["is_food"]:
-            return AiChatResponse(response=NOT_FOOD_REPLY, cart=data.cart)
-        messages = await build_answer_messages(db, analysis, data.message)
-        llm = get_chat_llm()
-        result = await llm.ainvoke(messages)
-        reply = sanitize_reply(_normalize_content(result.content))
+        if not (_zhipu_ready() and _bailian_ready()):
+            logger.warning("[AI Chat] 图片搜菜模型未配置完整，返回兜底回复")
+            return AiChatResponse(response=FALLBACK_REPLY, cart=data.cart)
+        try:
+            analysis = await analyze_food_image(data.image_base64)
+            if not analysis["is_food"]:
+                return AiChatResponse(response=NOT_FOOD_REPLY, cart=data.cart)
+            messages = await build_answer_messages(db, analysis, data.message)
+            llm = get_chat_llm()
+            result = await llm.ainvoke(messages)
+            reply = sanitize_reply(_normalize_content(result.content))
+        except Exception as e:
+            logger.exception(f"[AI Chat] 图片搜菜大模型调用失败，返回兜底回复: {e}")
+            return AiChatResponse(response=FALLBACK_REPLY, cart=data.cart)
         await _save_history(user_id, data.message or "[图片搜菜]", reply)
         return AiChatResponse(response=reply, cart=data.cart)
 
     # 文本分支：L1 快速路 -> L2 Agent
-    ctx = _make_context(db, data, user_id)
-    history = await chat_store.load_history(user_id)
-    reply = await _handle_text(ctx, data.message, history)
-    reply = sanitize_reply(reply)
+    try:
+        ctx = _make_context(db, data, user_id)
+        history = await chat_store.load_history(user_id)
+        reply = await _handle_text(ctx, data.message, history)
+        reply = sanitize_reply(reply)
+    except Exception as e:
+        logger.exception(f"[AI Chat] 处理失败，返回兜底回复: {e}")
+        return AiChatResponse(response=FALLBACK_REPLY, cart=data.cart)
     await _save_history(user_id, data.message, reply)
     return AiChatResponse(response=reply, cart=ctx.cart)
 
@@ -146,25 +186,43 @@ async def ai_chat_stream(
                 yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
 
             elif data.image_base64:
-                # 图片搜菜分支（保持不变）
-                analysis = await analyze_food_image(data.image_base64)
-                if not analysis["is_food"]:
-                    reply_parts.append(NOT_FOOD_REPLY)
+                # 图片搜菜分支（视觉 + 对话模型均不可用时直接兜底）
+                if not (_zhipu_ready() and _bailian_ready()):
+                    logger.warning("[AI ChatStream] 图片搜菜模型未配置完整，返回兜底回复")
+                    reply_parts.append(FALLBACK_REPLY)
                     payload = json.dumps(
-                        {"type": "text", "content": NOT_FOOD_REPLY}, ensure_ascii=False
+                        {"type": "text", "content": FALLBACK_REPLY}, ensure_ascii=False
                     )
                     yield f"data: {payload}\n\n"
                 else:
-                    messages = await build_answer_messages(db, analysis, data.message)
-                    llm = get_chat_llm(streaming=True)
-                    async for chunk in llm.astream(messages):
-                        content = sanitize_reply(_normalize_content(chunk.content))
-                        if content:
-                            reply_parts.append(content)
-                            payload = json.dumps(
-                                {"type": "text", "content": content}, ensure_ascii=False
-                            )
-                            yield f"data: {payload}\n\n"
+                    try:
+                        analysis = await analyze_food_image(data.image_base64)
+                    except Exception as e:
+                        logger.exception(f"[AI ChatStream] 图片搜菜大模型调用失败，返回兜底回复: {e}")
+                        analysis = None
+                    if analysis is None:
+                        reply_parts.append(FALLBACK_REPLY)
+                        payload = json.dumps(
+                            {"type": "text", "content": FALLBACK_REPLY}, ensure_ascii=False
+                        )
+                        yield f"data: {payload}\n\n"
+                    elif not analysis["is_food"]:
+                        reply_parts.append(NOT_FOOD_REPLY)
+                        payload = json.dumps(
+                            {"type": "text", "content": NOT_FOOD_REPLY}, ensure_ascii=False
+                        )
+                        yield f"data: {payload}\n\n"
+                    else:
+                        messages = await build_answer_messages(db, analysis, data.message)
+                        llm = get_chat_llm(streaming=True)
+                        async for chunk in llm.astream(messages):
+                            content = sanitize_reply(_normalize_content(chunk.content))
+                            if content:
+                                reply_parts.append(content)
+                                payload = json.dumps(
+                                    {"type": "text", "content": content}, ensure_ascii=False
+                                )
+                                yield f"data: {payload}\n\n"
 
             else:
                 # 文本分支：L1 快速路 -> L2 Agent
@@ -186,9 +244,15 @@ async def ai_chat_stream(
             yield f"data: {done_payload}\n\n"
 
         except Exception as e:
-            logger.exception(f"[AI ChatStream] 处理失败: {e}")
-            err_payload = json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False)
-            yield f"data: {err_payload}\n\n"
+            logger.exception(f"[AI ChatStream] 处理失败，返回兜底回复: {e}")
+            if not reply_parts:
+                reply_parts.append(FALLBACK_REPLY)
+                err_payload = json.dumps(
+                    {"type": "text", "content": FALLBACK_REPLY}, ensure_ascii=False
+                )
+                yield f"data: {err_payload}\n\n"
+            done_payload = json.dumps({"type": "done", "cart": final_cart}, ensure_ascii=False)
+            yield f"data: {done_payload}\n\n"
 
     return StreamingResponse(
         event_generator(),

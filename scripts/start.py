@@ -10,6 +10,7 @@ import signal
 import subprocess
 import platform
 from pathlib import Path
+from urllib.parse import urlparse
 
 # 修复 Windows 控制台中文输出乱码
 if sys.platform == "win32":
@@ -18,11 +19,45 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
+# 项目根目录（本文件位于 scripts/ 下）
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
 # 配置
 BACKEND_PORT = 8000
 FRONTEND_PORT = 5173
 BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}"
 FRONTEND_URL = f"http://localhost:{FRONTEND_PORT}"
+
+
+# 开发模式内置的本地默认连接（IS_SERVER=false 时强制生效）
+_DEV_MYSQL_URL = "mysql://root:123456@localhost:3306/meiwei_bot"
+_DEV_REDIS_URL = "redis://localhost:6379/0"
+_DEV_MONGODB_URL = "mongodb://localhost:27017"
+
+
+def _env_value(name: str) -> str:
+    """从 backend/.env 读取配置（.env 优先，环境变量兜底）"""
+    env_file = ROOT_DIR / "backend" / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith(f"{name}="):
+                return line.split("=", 1)[1].strip()
+    return os.environ.get(name, "")
+
+
+def load_mysql_config() -> dict:
+    """MySQL 容器配置：开发模式用内置默认值，部署模式解析 .env 的 DATABASE_URL"""
+    if _env_value("IS_SERVER").lower() not in ("1", "true", "yes"):
+        return {"password": "123456", "database": "meiwei_bot"}
+    parsed = urlparse(_env_value("DATABASE_URL"))
+    return {
+        "password": (parsed.password if parsed and parsed.password else "123456"),
+        "database": (parsed.path.lstrip("/") if parsed and parsed.path else "meiwei_bot"),
+    }
+
+
+_MYSQL_CFG = load_mysql_config()
 
 # Docker 容器配置
 DOCKER_CONTAINERS = [
@@ -35,7 +70,10 @@ DOCKER_CONTAINERS = [
         "name": "mysql-server",
         "image": "mysql:latest",
         "ports": {"3306": "3306"},
-        "env": {"MYSQL_ROOT_PASSWORD": "123456", "MYSQL_DATABASE": "meiwei_bot"},
+        "env": {
+            "MYSQL_ROOT_PASSWORD": _MYSQL_CFG["password"],
+            "MYSQL_DATABASE": _MYSQL_CFG["database"],
+        },
     },
     {
         # AI 聊天历史存储（必需依赖，与 MySQL 同级）
@@ -376,7 +414,7 @@ def main():
         sys.exit(1)
 
     # 确定路径
-    root = Path(__file__).parent.resolve()
+    root = ROOT_DIR
     backend_dir = root / "backend"
     frontend_dir = root / "frontend"
 

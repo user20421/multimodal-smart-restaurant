@@ -73,8 +73,8 @@ async def _rebuild(fp: str) -> None:
 
 async def ensure_ready() -> None:
     """后端启动时调用：必要时重建向量库。任何失败只告警，不影响主服务启动。"""
-    if not config.ZHIPU_API_KEY:
-        logger.warning("[AI RAG] 未配置 ZHIPU_API_KEY，跳过知识库初始化")
+    if not config.ZHIPU_API_KEY or not config.ZHIPU_EMBEDDING_MODEL:
+        logger.warning("[AI RAG] 未配置 ZHIPU_API_KEY 或向量模型名称，跳过知识库初始化")
         return
     try:
         fp = await _menu_fingerprint()
@@ -93,7 +93,7 @@ async def _refresh_loop() -> None:
     while True:
         await asyncio.sleep(REFRESH_INTERVAL)
         try:
-            if not config.ZHIPU_API_KEY:
+            if not config.ZHIPU_API_KEY or not config.ZHIPU_EMBEDDING_MODEL:
                 continue
             fp = await _menu_fingerprint()
             if fp != _read_fingerprint():

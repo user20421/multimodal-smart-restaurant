@@ -11,17 +11,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import AppException
-from app.core.database import init_db, AsyncSessionLocal
+from app.core.database import check_mysql
+from app.core.redis import check_redis
 from app.core.logging_config import setup_logging, get_logger
 from app.core.config import settings
 from app.api.v1 import auth, menu, order, admin, system
 from app.ai import router as ai_router
 from app.ai.rag import manager as rag_manager
-from app.services.init_service import initialize_system
 from app.ai import chat_store
-
-# 导入所有模型，确保 Base.metadata 包含所有表
-import app.models  # noqa: F401
 
 # 初始化日志
 setup_logging()
@@ -32,7 +29,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """
     应用生命周期管理
-    启动时：建表 + 初始化数据
+    数据库表结构与初始数据由项目根目录 init.sql 提供，应用启动时不再自动建表。
     """
     app.state.startup_time = datetime.now(timezone.utc).isoformat()
 
@@ -40,12 +37,15 @@ async def lifespan(app: FastAPI):
     if settings.jwt_secret_key in ("your-secret-key-change-in-production", ""):
         logger.warning("JWT_SECRET_KEY 使用的是默认弱密钥，生产环境请务必修改")
 
-    # 创建数据库表
-    await init_db()
+    # MySQL 连通性强校验（传统后端核心依赖，连不上/未执行 init.sql 则拒绝启动）
+    await check_mysql()
+    logger.info("MySQL 连接正常")
 
-    # 初始化数据
-    async with AsyncSessionLocal() as db:
-        await initialize_system(db)
+    # Redis 连通性软校验（验证码缓存，不可用时降级为内存缓存，不影响启动）
+    if await check_redis():
+        logger.info("Redis 连接正常")
+    else:
+        logger.warning("Redis 连接失败，图片验证码将降级为内存缓存（单机可用，重启失效）")
 
     # MongoDB 连通性强校验（AI 聊天历史存储，必需依赖，连不上则拒绝启动）
     await chat_store.check_connection()

@@ -11,6 +11,7 @@
 """
 import os
 import sys
+from pathlib import Path
 
 # 被测模型与向量维度
 MODEL = "embedding-3"
@@ -18,10 +19,21 @@ DIMENSIONS = 512
 TEST_TEXTS = ["美味餐厅的招牌水煮鱼非常正宗", "今天天气不错，适合出去吃饭"]
 
 
+def _get_key(name: str) -> str:
+    """从 backend/.env 读取配置（.env 优先，环境变量兜底）"""
+    env_file = Path(__file__).resolve().parents[1] / "backend" / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith(f"{name}="):
+                return line.split("=", 1)[1].strip()
+    return os.environ.get(name, "")
+
+
 def main() -> int:
-    api_key = os.environ.get("ZHIPU_API_KEY", "").strip()
+    api_key = _get_key("ZHIPU_API_KEY")
     if not api_key:
-        print("[失败] 未找到环境变量 ZHIPU_API_KEY，请先设置智谱 API Key")
+        print("[失败] 未在 backend/.env 或环境变量中找到 ZHIPU_API_KEY，请先配置智谱 API Key")
         return 1
 
     print(f"测试模型: {MODEL} (dimensions={DIMENSIONS})")

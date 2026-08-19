@@ -3,13 +3,13 @@
 数据库连通性测试脚本（独立可执行，不依赖项目其他文件）
 测试 Docker 中运行的 MySQL / Redis / MongoDB 服务。
 
-MySQL: root / 123456
-Redis: 无认证
-MongoDB: 无认证
+连接配置从 backend/.env 读取（.env 优先，环境变量兜底）。
 """
 
 import os
 import sys
+from pathlib import Path
+from urllib.parse import urlparse
 
 # 修复 Windows 控制台中文输出乱码
 if sys.platform == "win32":
@@ -17,24 +17,60 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-# ==================== 连接配置 ====================
-MYSQL_CONFIG = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "123456",
-    "database": "meiwei_bot",
-}
+# ==================== 连接配置（backend/.env 优先，环境变量兜底） ====================
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
-REDIS_CONFIG = {
-    "host": "localhost",
-    "port": 6379,
-}
 
-MONGODB_CONFIG = {
-    "host": "localhost",
-    "port": 27017,
-}
+# 开发模式内置的本地默认连接（IS_SERVER=false 时强制生效）
+_DEV_MYSQL_URL = "mysql://root:123456@localhost:3306/meiwei_bot"
+_DEV_REDIS_URL = "redis://localhost:6379/0"
+_DEV_MONGODB_URL = "mongodb://localhost:27017"
+
+
+def _env_value(name: str) -> str:
+    env_file = ROOT_DIR / "backend" / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith(f"{name}="):
+                return line.split("=", 1)[1].strip()
+    return os.environ.get(name, "")
+
+
+def _is_server() -> bool:
+    """是否部署模式（false=开发，使用内置本地默认连接；true=部署，使用 .env 连接信息）"""
+    return _env_value("IS_SERVER").lower() in ("1", "true", "yes")
+
+
+def _parse_mysql_config() -> dict:
+    url = _env_value("DATABASE_URL") if _is_server() else _DEV_MYSQL_URL
+    p = urlparse(url or _DEV_MYSQL_URL)
+    return {
+        "host": p.hostname or "localhost",
+        "port": p.port or 3306,
+        "user": p.username or "root",
+        "password": p.password or "",
+        "database": p.path.lstrip("/") or "meiwei_bot",
+    }
+
+
+def _parse_redis_url() -> str:
+    """Redis 连接 URL，支持 redis://用户名:密码@主机:端口/库序号"""
+    if not _is_server():
+        return _DEV_REDIS_URL
+    return _env_value("REDIS_URL") or _DEV_REDIS_URL
+
+
+def _parse_mongodb_url() -> str:
+    """MongoDB 连接 URL，支持 mongodb://用户名:密码@主机:端口"""
+    if not _is_server():
+        return _DEV_MONGODB_URL
+    return _env_value("MONGODB_URL") or _DEV_MONGODB_URL
+
+
+MYSQL_CONFIG = _parse_mysql_config()
+REDIS_URL = _parse_redis_url()
+MONGODB_URL = _parse_mongodb_url()
 
 # 连接超时（毫秒）
 TIMEOUT_MS = 3000
@@ -59,9 +95,8 @@ def test_redis() -> bool:
         return False
 
     try:
-        client = redis.Redis(
-            host=REDIS_CONFIG["host"],
-            port=REDIS_CONFIG["port"],
+        client = redis.Redis.from_url(
+            REDIS_URL,
             decode_responses=True,
             socket_connect_timeout=TIMEOUT_MS / 1000,
         )
@@ -174,8 +209,7 @@ def test_mongodb() -> bool:
     client = None
     try:
         client = MongoClient(
-            host=MONGODB_CONFIG["host"],
-            port=MONGODB_CONFIG["port"],
+            MONGODB_URL,
             serverSelectionTimeoutMS=TIMEOUT_MS,
         )
         # server_info 会触发实际连接（MongoClient 本身是惰性连接）

@@ -1,35 +1,47 @@
 # Web Framework
-fastapi>=0.110.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.29
+fastapi==0.141.1
+uvicorn[standard]==0.52.3
+python-multipart==0.0.32
 
 # Database
-sqlalchemy[asyncio]>=2.0.0
-aiomysql>=0.2.0
-pymysql>=1.1.0
-cryptography>=42.0.0
+sqlalchemy[asyncio]==2.0.52
+aiomysql==0.3.2
+pymysql==1.2.0
+cryptography==50.0.0
 
 # Data Validation
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
 
 # PDF Export
-reportlab>=4.0.0
-pillow>=10.0.0
+reportlab==5.0.0
+pillow==12.3.0
 
 # Auth
-PyJWT>=2.8.0
-bcrypt>=4.1.0
+PyJWT==2.8.0
+bcrypt==5.0.0
 
 # Face Recognition
-face-recognition>=1.3.0
-# face_recognition_models 依赖 pkg_resources，setuptools>=70 已移除该模块
-dlib>=19.7
-setuptools<70
-numpy>=1.24.0
+# face_recognition_models 依赖 pkg_resources，setuptools>=70 已移除该模块，须保持 <70
+face-recognition==1.3.0
+dlib==19.24.2
+setuptools==69.5.1
+numpy==1.26.4
 
 # Cache
-redis>=5.0.0
+redis==8.1.0
 
-# MongoDB（AI 聊天历史存储，可选；scripts/test_db.py 连通性测试也用）
-pymongo>=4.6.0
+# MongoDB（AI 聊天历史存储）
+pymongo==4.17.0
+
+# AI（LangChain 系 + 向量库 + 智谱 SDK）
+langchain==1.3.15
+langchain-core==1.5.5
+langchain-openai==1.5.1
+langgraph==1.2.11
+chromadb==1.5.9
+zhipuai==2.1.5.20250825
+
+# Scripts（scripts/ 连通性测试用）
+requests==2.34.2
