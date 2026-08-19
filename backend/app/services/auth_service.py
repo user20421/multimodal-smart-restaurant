@@ -22,11 +22,11 @@ from app.core.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-# 默认管理员账号（由项目根目录 init.sql 创建，登录后强制修改密码）
+# 默认管理员账号（由 scripts/init.sql 创建，登录后强制修改密码）
 DEFAULT_ADMIN_USERNAME = "root"
 DEFAULT_ADMIN_PASSWORD = "123456"
 
-# 超级管理员账号（由项目根目录 init.sql 创建，仅用于重置管理员密码）
+# 超级管理员账号（由 scripts/init.sql 创建，仅用于重置管理员密码）
 SUPER_ADMIN_USERNAME = "rootroot"
 SUPER_ADMIN_INITIAL_PASSWORD = "rootroot"
 

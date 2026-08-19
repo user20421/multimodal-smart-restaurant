@@ -22,11 +22,8 @@ body {
   border: 1px solid #304156;
 }
 
-/* 修复 Element Plus 弹窗（MessageBox/Dialog/Drawer）锁滚动时的滚动条补偿误判：
-   body 本身没有滚动条（应用由内部容器自行滚动），
-   EP 新版注入 width: calc(100% - 17px)、旧版注入 padding-right，
-   都会把 99% 宽且居中的 #app 向左挤，导致页面右侧空隙变大 */
-body.el-popup-parent--hidden {
-  width: 100% !important;
-  padding-right: 0 !important;
-}
+/* Element Plus 弹窗锁屏说明：
+   EP 2.13 打开弹窗时会给 body 加 overflow:hidden 并注入 width: calc(100% - 滚动条宽度)，
+   该补偿本身能保证 body 宽度在弹窗前后恒定（99% 居中的 #app 不位移）。
+   不要在此处覆盖 body 的宽度/padding（曾经用 !important 压掉注入，反而导致位移）；
+   也不要用 scrollbar-gutter（overflow:visible 的根元素上不生效）。 */

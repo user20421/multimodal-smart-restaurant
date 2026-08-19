@@ -55,8 +55,8 @@ async def sample_data(db: AsyncSession):
     return {"user": user}
 
 
-def make_ctx(db: AsyncSession, user_id: int, cart=None) -> AgentContext:
-    return AgentContext(db=db, user_id=user_id, cart=list(cart or []))
+def make_ctx(db: AsyncSession, user_id: int, cart=None, message: str = "") -> AgentContext:
+    return AgentContext(db=db, user_id=user_id, message=message, cart=list(cart or []))
 
 
 # ============================================================
@@ -198,3 +198,82 @@ async def test_query_orders_on_date(db, sample_data):
 
     none_day = await query_orders_on_date(db, uid, 5)
     assert "没有订单" in none_day
+
+
+# ============================================================
+# 写操作"本句表达"守卫（guard_write_op）
+# 规则：增删改/下单只能依据用户当前这句话；句中未明确提及的操作一律拒绝。
+# 即使上一轮是助手给出的选项，用户只回"移除/好的"也不算数。
+# ============================================================
+
+
+def _get_tool(ctx, name: str):
+    from app.ai.agent.tools.cart_tools import build_cart_tools
+    from app.ai.agent.tools.order_tools import build_place_order_tool
+
+    tools = build_cart_tools(ctx) + build_place_order_tool(ctx)
+    return next(t for t in tools if t.name == name)
+
+
+async def test_guard_refusal_and_pass(db, sample_data):
+    """守卫纯函数：句中未提及 -> 拒绝话术；已提及 -> 放行"""
+    from app.ai.agent.tools.cart_tools import guard_write_op
+
+    ctx = make_ctx(db, 1, message="移除")
+    refusal = guard_write_op(ctx, "宫保鸡丁", example="把宫保鸡丁移除")
+    assert refusal is not None and "未执行任何操作" in refusal
+
+    ctx2 = make_ctx(db, 1, message="把宫保鸡丁移除")
+    assert guard_write_op(ctx2, "宫保鸡丁", example="把宫保鸡丁移除") is None
+
+
+async def test_remove_tool_refuses_echo_confirmation(db, sample_data):
+    """用户只回"移除"（上一轮助手给的选项）-> 拒绝执行，购物车不变"""
+    cart = [{"menu_item_id": 1, "name": "宫保鸡丁", "quantity": 1, "unit_price": 38.0}]
+    ctx = make_ctx(db, 1, cart, message="移除")
+    tool = _get_tool(ctx, "remove_from_cart")
+    result = await tool.ainvoke({"dish_name": "宫保鸡丁"})
+    assert "未执行任何操作" in result
+    assert len(ctx.cart) == 1  # 购物车未被修改
+    assert not ctx.dirty
+
+
+async def test_add_tool_refuses_when_dish_not_in_message(db, sample_data):
+    """"再加一份"未提菜名 -> 拒绝执行"""
+    ctx = make_ctx(db, 1, message="再加一份")
+    tool = _get_tool(ctx, "add_to_cart")
+    result = await tool.ainvoke({"dish_name": "宫保鸡丁", "quantity": 1})
+    assert "未执行任何操作" in result
+    assert ctx.cart == []
+
+
+async def test_set_quantity_refuses_when_dish_not_in_message(db, sample_data):
+    """"改成2份"未提菜名 -> 拒绝执行"""
+    cart = [{"menu_item_id": 1, "name": "宫保鸡丁", "quantity": 1, "unit_price": 38.0}]
+    ctx = make_ctx(db, 1, cart, message="改成2份")
+    tool = _get_tool(ctx, "set_dish_quantity")
+    result = await tool.ainvoke({"dish_name": "宫保鸡丁", "quantity": 2})
+    assert "未执行任何操作" in result
+    assert ctx.cart[0]["quantity"] == 1
+
+
+async def test_clear_cart_requires_explicit_words(db, sample_data):
+    """清空购物车：动作词+对象缺一不可"""
+    cart = [{"menu_item_id": 1, "name": "宫保鸡丁", "quantity": 1, "unit_price": 38.0}]
+
+    ctx = make_ctx(db, 1, list(cart), message="都不要了")
+    result = await _get_tool(ctx, "clear_cart").ainvoke({})
+    assert "未执行任何操作" in result and len(ctx.cart) == 1
+
+    ctx2 = make_ctx(db, 1, list(cart), message="清空购物车")
+    result2 = await _get_tool(ctx2, "clear_cart").ainvoke({})
+    assert "已清空" in result2 and ctx2.cart == []
+
+
+async def test_place_order_refuses_without_order_word(db, sample_data):
+    """用户只回"好的" -> 下单被拒绝，购物车保留"""
+    cart = [{"menu_item_id": 1, "name": "宫保鸡丁", "quantity": 1, "unit_price": 38.0}]
+    ctx = make_ctx(db, 1, cart, message="好的")
+    result = await _get_tool(ctx, "place_order").ainvoke({})
+    assert "未执行任何操作" in result
+    assert len(ctx.cart) == 1

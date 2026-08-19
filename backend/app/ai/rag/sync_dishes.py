@@ -23,12 +23,15 @@ SPICY_TEXT = {0: "不辣", 1: "微辣", 2: "中辣", 3: "特辣"}
 
 
 def _dish_to_markdown(item) -> str:
-    """将菜品信息渲染为一份知识文档。"""
+    """将菜品信息渲染为一份知识文档。
+
+    不含价格与库存：两者是动态数据，一律以 search_dish 实时查询数据库为准，
+    避免知识库快照与库内真实值不一致。
+    """
     lines = [
         f"# {item.name}",
         "",
         f"- 分类：{item.category}",
-        f"- 价格：{item.price:.0f} 元",
         f"- 辣度：{SPICY_TEXT.get(item.spicy_level, '未知')}",
     ]
     if item.tags:

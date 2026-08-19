@@ -223,6 +223,14 @@ async def test_recent_orders_empty(db, sample_data):
     assert reply and "没有订单" in reply
 
 
+async def test_my_orders_button_phrases(db, sample_data):
+    """快捷按钮来源的“查询我的订单/查询订单”应直接命中 L1，不调 LLM"""
+    ctx = make_ctx(db, sample_data["user"].id)
+    for text in ("查询我的订单", "查询订单", "查看我的订单", "查一下我的订单", "我的订单"):
+        reply = await fastpath.try_handle(ctx, text)
+        assert reply is not None and "订单" in reply, text
+
+
 async def test_last_days_orders_empty(db, sample_data):
     ctx = make_ctx(db, sample_data["user"].id)
     reply = await fastpath.try_handle(ctx, "最近两天的订单")

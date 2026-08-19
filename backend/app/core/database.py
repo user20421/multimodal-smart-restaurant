@@ -2,7 +2,7 @@
 MySQL 数据库连接管理
 使用 SQLAlchemy 2.0 async 模式
 
-数据库表结构与初始数据由项目根目录 init.sql 提供，本模块不负责建库建表。
+数据库表结构与初始数据由 scripts/init.sql 提供，本模块不负责建库建表。
 """
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker

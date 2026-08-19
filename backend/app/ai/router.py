@@ -51,7 +51,7 @@ def _normalize_content(content) -> str:
 
 def _make_context(db: AsyncSession, data: AiChatRequest, user_id: int) -> AgentContext:
     """从请求快照构建 Agent 上下文（深拷贝购物车，避免污染请求数据）。"""
-    return AgentContext(db=db, user_id=user_id, cart=copy.deepcopy(data.cart))
+    return AgentContext(db=db, user_id=user_id, message=data.message, cart=copy.deepcopy(data.cart))
 
 
 def _bailian_ready() -> bool:

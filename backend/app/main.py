@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """
     应用生命周期管理
-    数据库表结构与初始数据由项目根目录 init.sql 提供，应用启动时不再自动建表。
+    数据库表结构与初始数据由 scripts/init.sql 提供，应用启动时不再自动建表。
     """
     app.state.startup_time = datetime.now(timezone.utc).isoformat()
 

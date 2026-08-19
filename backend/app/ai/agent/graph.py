@@ -78,7 +78,7 @@ def _normalize_content(content: Any) -> str:
 
 
 def _history_to_messages(history: List[Dict[str, Any]]) -> List[BaseMessage]:
-    """MongoDB 历史记录 -> LangChain 消息（仅 user/assistant 两种角色）。"""
+    """MongoDB 历史记录 -> LangChain 消息（user/assistant；system 为滚动摘要注入）。"""
     messages: List[BaseMessage] = []
     for h in history:
         role, content = h.get("role"), str(h.get("content") or "")
@@ -88,6 +88,8 @@ def _history_to_messages(history: List[Dict[str, Any]]) -> List[BaseMessage]:
             messages.append(HumanMessage(content=content))
         elif role == "assistant":
             messages.append(AIMessage(content=content))
+        elif role == "system":
+            messages.append(SystemMessage(content=content))
     return messages
 
 

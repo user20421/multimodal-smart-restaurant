@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class AgentContext:
     db: AsyncSession
     user_id: int
+    # 用户当前这句话（写操作守卫用：增删改/下单必须由本句明确表达）
+    message: str = ""
     # 购物车快照（元素: {"menu_item_id","name","quantity","unit_price"}）
     cart: List[Dict[str, Any]] = field(default_factory=list)
     dirty: bool = False  # 购物车是否被本次对话修改过

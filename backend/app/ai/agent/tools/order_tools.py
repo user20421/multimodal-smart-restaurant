@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.agent.context import AgentContext
-from app.ai.agent.tools.cart_tools import cart_clear
+from app.ai.agent.tools.cart_tools import cart_clear, write_refusal_text
 from app.core.database import AsyncSessionLocal
 from app.core.exceptions import AppException
 from app.core.logging_config import get_logger
@@ -25,6 +25,9 @@ logger = get_logger(__name__)
 
 # 单次查询最多拉取的订单数（时间范围过滤在这个集合内做）
 _MAX_FETCH = 100
+
+# 下单类动作词（必须出现在用户当前这句话中，place_order 才允许执行）
+_ORDER_WORDS = ("下单", "结算", "买单", "付款", "交钱")
 
 
 def _format_orders(orders: List[Order], empty_text: str) -> str:
@@ -153,7 +156,10 @@ def build_place_order_tool(ctx: AgentContext) -> list:
     async def place_order(remark: str = "") -> str:
         """用当前购物车的内容创建订单（下单）。
         仅当用户明确表达下单/结算意图时调用；remark 为用户备注（可选）。
+        注意：用户当前这句话必须包含“下单/结算/买单”等明确动作词，否则工具会拒绝执行。
         """
+        if not any(w in (ctx.message or "") for w in _ORDER_WORDS):
+            return write_refusal_text("确认下单")
         return await place_order_from_cart(ctx, remark or None)
 
     return [place_order]
