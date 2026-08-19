@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 数据库连通性测试脚本（独立可执行，不依赖项目其他文件）
-测试 Docker 中运行的 MySQL / Redis 服务。
+测试 Docker 中运行的 MySQL / Redis / MongoDB 服务。
 
 MySQL: root / 123456
 Redis: 无认证
+MongoDB: 无认证
 """
 
 import os
@@ -28,6 +29,11 @@ MYSQL_CONFIG = {
 REDIS_CONFIG = {
     "host": "localhost",
     "port": 6379,
+}
+
+MONGODB_CONFIG = {
+    "host": "localhost",
+    "port": 27017,
 }
 
 # 连接超时（毫秒）
@@ -154,6 +160,48 @@ def test_mysql() -> bool:
             connection.close()
 
 
+def test_mongodb() -> bool:
+    """测试 MongoDB 连接与基本操作。"""
+    print("\n[MongoDB 测试开始]")
+    try:
+        from pymongo import MongoClient
+        from pymongo.errors import PyMongoError
+    except ImportError:
+        print(_red("[FAIL] 缺少依赖: pymongo"))
+        print("       请安装: pip install pymongo")
+        return False
+
+    client = None
+    try:
+        client = MongoClient(
+            host=MONGODB_CONFIG["host"],
+            port=MONGODB_CONFIG["port"],
+            serverSelectionTimeoutMS=TIMEOUT_MS,
+        )
+        # server_info 会触发实际连接（MongoClient 本身是惰性连接）
+        info = client.server_info()
+        print(_green(f"[OK] MongoDB 连接成功 (version {info.get('version')})"))
+
+        col = client["connectivity_test"]["test_col"]
+        inserted_id = col.insert_one({"message": "hello mongodb"}).inserted_id
+        print(_green(f"[OK] 插入数据: _id = {inserted_id}"))
+
+        doc = col.find_one({"_id": inserted_id})
+        print(_green(f"[OK] 查询数据: {doc}"))
+
+        client.drop_database("connectivity_test")
+        print(_green("[OK] MongoDB 测试数据已清理"))
+        return True
+
+    except PyMongoError as e:
+        print(_red(f"[FAIL] MongoDB 连接异常: {e}"))
+        return False
+
+    finally:
+        if client:
+            client.close()
+
+
 if __name__ == "__main__":
     print("=" * 50)
     print("数据库服务连通性测试")
@@ -162,6 +210,7 @@ if __name__ == "__main__":
     results = {
         "Redis": test_redis(),
         "MySQL": test_mysql(),
+        "MongoDB": test_mongodb(),
     }
 
     print("\n" + "=" * 50)

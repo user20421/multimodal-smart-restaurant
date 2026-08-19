@@ -9,7 +9,8 @@
     - 支持快捷操作按钮（推荐菜品、查看菜单等）
     - 支持图片搜菜（上传图片识别菜品）
     - 支持购物车抽屉和悬浮购物车按钮
-    - 支持数字人头像和语音播报开关
+    - 支持机器人头像和语音播报开关（浏览器 speechSynthesis 分句播报）
+    - 支持麦克风语音输入（浏览器 SpeechRecognition，识别结果填入输入框）
     - 发送消息后自动滚动到底部
   ============================================================
 -->
@@ -29,8 +30,18 @@
         class="speech-toggle"
       >
         <el-icon size="16">
-          <Microphone v-if="speechEnabled" />
-          <Mute v-else />
+          <!-- 扬声器开 -->
+          <svg v-if="speechEnabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none" />
+            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+            <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13" />
+          </svg>
+          <!-- 扬声器关 -->
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none" />
+            <line x1="16" y1="9" x2="22" y2="15" />
+            <line x1="22" y1="9" x2="16" y2="15" />
+          </svg>
         </el-icon>
       </el-button>
     </div>
@@ -38,9 +49,13 @@
     <!-- 右栏：消息列表 + 快捷按钮 + 输入框 -->
     <div class="chat-main">
     <div class="chat-messages" ref="messageBox">
-      <div
+      <template
         v-for="(msg, index) in messages"
         :key="msg.id || `${msg.role}-${index}-${msg.content?.slice(0, 20)}`"
+      >
+      <!-- 预插入的空 assistant 占位消息不渲染（由“思考中”指示器顶替） -->
+      <div
+        v-if="msg.role === 'user' || msg.content"
         :class="['message-row', msg.role === 'user' ? 'user' : 'bot']"
       >
         <el-avatar
@@ -62,6 +77,7 @@
           ></div>
         </div>
       </div>
+      </template>
 
       <div v-if="loading" class="message-row bot">
         <el-avatar :size="40" icon="Food" class="bot-avatar" />
@@ -110,10 +126,21 @@
 
       <el-input
         v-model="inputMessage"
-        :placeholder="imagePreviewUrl ? '可以补充描述，或直接发送图片' : '告诉我你想吃什么，例如：来一份宫保鸡丁'"
+        :placeholder="isRecording ? '正在聆听，请说话…' : (imagePreviewUrl ? '可以补充描述，或直接发送图片' : '告诉我你想吃什么，例如：来一份宫保鸡丁')"
         @keyup.enter="sendMessage"
         size="large"
       >
+        <template #prepend>
+          <el-button
+            circle
+            :type="isRecording ? 'danger' : 'default'"
+            :class="{ 'recording-pulse': isRecording }"
+            :title="isRecording ? '点击停止语音输入' : '点击切换为语音输入'"
+            @click="toggleVoiceInput"
+          >
+            <el-icon><Microphone /></el-icon>
+          </el-button>
+        </template>
         <template #append>
           <el-button type="primary" @click="sendMessage" :loading="loading">
             发送
@@ -164,7 +191,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { Microphone, Mute, Camera, Close } from '@element-plus/icons-vue'
+import { Microphone, Camera, Close } from '@element-plus/icons-vue'
 
 import { marked } from 'marked'
 
@@ -174,7 +201,7 @@ import { useCartStore } from '@/features/cart/stores/cart.store'
 import { useChatStore } from '@/features/chat/stores/chat.store'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 
-import { sendChatMessageStream } from '@/features/chat/api/chat.api'
+import { sendChatMessageStream, clearChatHistory } from '@/features/chat/api/chat.api'
 
 import DigitalAvatar from '@/components/DigitalAvatar.vue'
 
@@ -217,6 +244,101 @@ const cartStore = useCartStore()
 const avatarStatus = ref<AvatarStatus>('idle')
 
 const speechEnabled = ref(localStorage.getItem(STORAGE_KEY_SPEECH) !== 'false')
+
+// ============================================================
+// 第 3.5 步：语音输入（浏览器内置 SpeechRecognition）
+// ============================================================
+
+const isRecording = ref(false)
+
+// 静音自动停止：4 秒内无任何声音活动则停止录音（说话/识别结果会重置计时）
+const SILENCE_TIMEOUT = 4000
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let recognition: any = null
+let silenceTimer: number | null = null
+
+function clearSilenceTimer() {
+  if (silenceTimer !== null) {
+    clearTimeout(silenceTimer)
+    silenceTimer = null
+  }
+}
+
+function stopVoiceInput() {
+  clearSilenceTimer()
+  if (recognition) {
+    try {
+      recognition.stop()
+    } catch {
+      // 已停止时忽略
+    }
+  }
+}
+
+function toggleVoiceInput() {
+  if (isRecording.value) {
+    stopVoiceInput()
+    return
+  }
+
+  const Ctor = (window as unknown as { SpeechRecognition?: new () => any; webkitSpeechRecognition?: new () => any })
+    .SpeechRecognition ||
+    (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition
+
+  if (!Ctor) {
+    ElMessage.warning('当前浏览器不支持语音输入，请使用 Chrome / Edge')
+    return
+  }
+
+  const rec = new Ctor()
+  recognition = rec
+  rec.lang = 'zh-CN'
+  rec.interimResults = true // 边说边出字
+  rec.continuous = true     // 持续聆听，由静音定时器决定何时停止
+
+  let gotSpeech = false
+  const armSilenceTimer = () => {
+    clearSilenceTimer()
+    silenceTimer = window.setTimeout(() => {
+      stopVoiceInput()
+      if (!gotSpeech) {
+        ElMessage.info('未检测到说话声音，已停止语音输入')
+      }
+    }, SILENCE_TIMEOUT)
+  }
+
+  rec.onresult = (e: any) => {
+    gotSpeech = true
+    armSilenceTimer() // 识别到说话内容，重置静音计时
+    let transcript = ''
+    for (let i = 0; i < e.results.length; i++) {
+      transcript += e.results[i][0].transcript
+    }
+    inputMessage.value = transcript
+  }
+  // 检测到声音（含未识别出内容的声音）也重置静音计时
+  rec.onsoundstart = armSilenceTimer
+  rec.onspeechstart = armSilenceTimer
+  rec.onend = () => {
+    clearSilenceTimer()
+    isRecording.value = false
+  }
+  rec.onerror = () => {
+    clearSilenceTimer()
+    isRecording.value = false
+    ElMessage.warning('语音识别失败，请检查麦克风权限后重试')
+  }
+
+  try {
+    rec.start()
+    isRecording.value = true
+    armSilenceTimer() // 启动后 4 秒无声音则自动停止
+    stopSpeaking() // 开始语音输入时，打断正在播报的内容（用户要说话了）
+  } catch {
+    ElMessage.warning('语音识别启动失败，请重试')
+  }
+}
 
 // ============================================================
 // 第 4 步：图片搜菜相关状态
@@ -270,16 +392,21 @@ function formatText(text: string) {
   return sanitizeTextHtml(html)
 }
 
+// 舞台指示/语气动作标注（如“（微笑）”“(点头)”）：括号内只含此类词时整体移除
+// （后端出口已净化，这里兜底 SSE 分块把一个标注拆到两个 chunk 的漏网情况）
+const STAGE_DIR_RE = /\s*[（(](?:微笑|轻笑|大笑|笑|点头|摇头|眨眼|叹气|皱眉|鼓掌|挥手|害羞|调皮|得意|温柔|开心|难过|生气|语气轻快|停顿|思考|认真)(?:[，、,~～\s]*(?:微笑|轻笑|大笑|笑|点头|摇头|眨眼|叹气|皱眉|鼓掌|挥手|害羞|调皮|得意|温柔|开心|难过|生气|语气轻快|停顿|思考|认真))*[）)]/g
+
 function renderMarkdown(text: string) {
-  if (markdownCache.has(text)) {
-    return markdownCache.get(text)!
+  const cleaned = text.replace(STAGE_DIR_RE, '')
+  if (markdownCache.has(cleaned)) {
+    return markdownCache.get(cleaned)!
   }
 
-  const rawHtml = marked.parse(text, { breaks: true, gfm: true }) as string
+  const rawHtml = marked.parse(cleaned, { breaks: true, gfm: true }) as string
 
   const html = sanitizeHtml(rawHtml)
 
-  markdownCache.set(text, html)
+  markdownCache.set(cleaned, html)
 
   return html
 }
@@ -377,7 +504,11 @@ async function sendMessage() {
 
   if (!text && !hasImage) return
 
-  if (window.speechSynthesis) window.speechSynthesis.cancel()
+  stopVoiceInput()
+  interruptTypewriter?.()
+  interruptTypewriter = null
+  stopSpeaking()
+  ttsFlushed = false
 
   const userMessage: { role: 'user'; content: string; imageUrl?: string } = {
     role: 'user',
@@ -403,6 +534,25 @@ async function sendMessage() {
 
   let rawResponse = ''
   let assistantIndex = -1
+  const mySeq = speakSeq
+
+  // GPT 风格打字机：SSE 原文进入缓冲，前端匀速逐字渲染（积压越多走得越快，平滑追赶）
+  let shownLen = 0
+  let streamDone = false
+  let finalText = ''
+  let twTimer: number | null = null
+  const interruptThis = () => {
+    if (twTimer !== null) {
+      clearInterval(twTimer)
+      twTimer = null
+    }
+    if (interruptTypewriter === interruptThis) interruptTypewriter = null
+    // 中断时把已收到的原文一次性落地，避免消息停在半截
+    if (assistantIndex >= 0) {
+      chatStore.updateMessage(assistantIndex, { role: 'assistant', content: streamDone ? finalText : rawResponse })
+    }
+  }
+  interruptTypewriter = interruptThis
 
   try {
     const currentCart: CartItem[] = JSON.parse(JSON.stringify(cartStore.items || []))
@@ -422,28 +572,50 @@ async function sendMessage() {
     assistantIndex = messages.value.length - 1
 
     for await (const event of sendChatMessageStream(payload)) {
+      // 首个事件（正文或过渡提示）到达即撤下“思考中”指示器
+      if (loading.value) loading.value = false
       if (event.type === 'text' && event.content) {
         rawResponse += event.content
-        chatStore.updateMessage(assistantIndex, { role: 'assistant', content: rawResponse })
-        await scrollToBottom()
+        feedTts(event.content, mySeq)
+        if (twTimer === null) {
+          twTimer = window.setInterval(() => {
+            if (shownLen < rawResponse.length) {
+              const backlog = rawResponse.length - shownLen
+              shownLen += Math.max(1, Math.ceil(backlog / 12))
+              chatStore.updateMessage(assistantIndex, { role: 'assistant', content: rawResponse.slice(0, shownLen) })
+              void scrollToBottom()
+            } else if (streamDone) {
+              interruptThis()
+            }
+          }, 24)
+        }
+      } else if (event.type === 'status' && event.content) {
+        // 工具执行中的过渡提示（如“正在查询订单…”），正文到达后即被覆盖
+        if (!rawResponse) {
+          chatStore.updateMessage(assistantIndex, { role: 'assistant', content: event.content })
+          await scrollToBottom()
+        }
       } else if (event.type === 'done') {
-        const finalResponse = appendCartSummary(rawResponse, event.cart || [])
-        chatStore.updateMessage(assistantIndex, { role: 'assistant', content: finalResponse })
-        avatarStatus.value = 'idle'
+        finalText = appendCartSummary(rawResponse, event.cart || [])
+        streamDone = true
+        flushTts(mySeq)
+        if (twTimer === null) interruptThis() // 无正文时直接落地最终文本
       } else if (event.type === 'error') {
+        interruptThis()
         chatStore.updateMessage(assistantIndex, { role: 'assistant', content: '抱歉，服务暂时异常，请稍后重试。' })
+        stopSpeaking()
         avatarStatus.value = 'idle'
         console.error(event.message)
       }
     }
-
-    speakText(rawResponse)
   } catch (err) {
+    interruptThis()
     if (assistantIndex >= 0) {
       chatStore.updateMessage(assistantIndex, { role: 'assistant', content: '抱歉，服务暂时异常，请稍后重试。' })
     } else {
       chatStore.addMessage({ role: 'assistant', content: '抱歉，服务暂时异常，请稍后重试。' })
     }
+    stopSpeaking()
     avatarStatus.value = 'idle'
     console.error(err)
   } finally {
@@ -456,21 +628,113 @@ async function sendMessage() {
 // 第 10 步：语音相关函数
 // ============================================================
 
-function speakText(text: string) {
-  if (!speechEnabled.value || !window.speechSynthesis) return
+// 语音播报：浏览器内置 speechSynthesis，分句流水线——SSE 每凑满一个完整句子
+// 立即推入浏览器语音队列（原生按序播报、句间无停顿），第一句出现时即可出声。
+const TTS_END_RE = /[^。！？!?；;\n]+[。！？!?；;\n]+/g
+const TTS_SOFT_RE = /[，、：,]/
+const TTS_LONG = 30 // 缓冲区超过该长度且无句末标点时，按次级标点软切分
+const TTS_SOFT_MIN = 16 // 软切分点之前至少保留的字符数
 
+let speakSeq = 0 // 发送新消息时递增，使进行中的播放流程失效
+let ttsBuffer = ''
+let ttsPending = 0 // 已推入浏览器队列但尚未播完的句子数
+let ttsFlushed = false // 流式文本是否已全部进入播报队列
+
+// 进行中的打字机中断函数（新消息发送时打断上一轮的逐字渲染）
+let interruptTypewriter: (() => void) | null = null
+
+/** TTS 输入净化：去掉 markdown/emoji 符号，数量/金额/编号转为自然口语，避免被读出来 */
+function cleanTtsText(s: string): string {
+  return s
+    .replace(/#(\d+)/g, '$1号')                                       // 订单 #28 -> 28号
+    .replace(/\[(\d+)\]/g, '$1号')                                    // 订单 [28] -> 28号
+    .replace(/[x×]\s*(\d+)/g, '$1份')                                // 宫保鸡丁 ×2 -> 宫保鸡丁 2份
+    .replace(/¥\s*(\d+(?:\.\d+)?)/g, (_, n) => `${parseFloat(n)}元`) // ¥186.0 -> 186元
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/gu, '')
+    .replace(/[*#>`•·─━~|]+/g, '')
+    .replace(/-{3,}/g, '，')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** 从缓冲区切出完整句子；长句按次级标点软切分；flushAll 时把剩余文本一并切出 */
+function drainTtsSentences(flushAll = false): string[] {
+  const out: string[] = []
+  TTS_END_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  let last = 0
+  while ((m = TTS_END_RE.exec(ttsBuffer)) !== null) {
+    out.push(m[0])
+    last = TTS_END_RE.lastIndex
+  }
+  ttsBuffer = ttsBuffer.slice(last)
+
+  // 长句软切分：降低首句等待
+  if (!flushAll && ttsBuffer.length > TTS_LONG) {
+    for (let i = TTS_SOFT_MIN; i < ttsBuffer.length; i++) {
+      if (TTS_SOFT_RE.test(ttsBuffer[i])) {
+        out.push(ttsBuffer.slice(0, i + 1))
+        ttsBuffer = ttsBuffer.slice(i + 1)
+        break
+      }
+    }
+  }
+  if (flushAll && ttsBuffer.trim()) {
+    out.push(ttsBuffer)
+    ttsBuffer = ''
+  }
+  return out
+}
+
+/** 把句子推入浏览器语音队列（speechSynthesis 原生按序连续播报） */
+function enqueueTts(sentence: string) {
+  if (!window.speechSynthesis) return
+  const text = cleanTtsText(sentence)
+  if (text.length < 2) return
+  const seq = speakSeq
+  ttsPending++
   const utter = new SpeechSynthesisUtterance(text)
-
   utter.lang = 'zh-CN'
-
   utter.rate = 1.1
-
+  utter.onstart = () => {
+    if (seq === speakSeq) avatarStatus.value = 'speaking'
+  }
+  utter.onend = () => {
+    ttsPending--
+    if (seq === speakSeq && ttsPending <= 0 && ttsFlushed) {
+      avatarStatus.value = 'idle'
+    }
+  }
   window.speechSynthesis.speak(utter)
+}
+
+/** 流式文本到达时喂入语音队列（seq 过期说明已有新消息，直接丢弃） */
+function feedTts(chunk: string, seq: number) {
+  if (!speechEnabled.value || seq !== speakSeq) return
+  ttsBuffer += chunk
+  for (const s of drainTtsSentences()) enqueueTts(s)
+}
+
+/** 流式输出结束：剩余文本送入播报并收尾 */
+function flushTts(seq: number) {
+  if (seq !== speakSeq) return
+  ttsFlushed = true
+  if (!speechEnabled.value) return
+  for (const s of drainTtsSentences(true)) enqueueTts(s)
+  if (ttsPending === 0) avatarStatus.value = 'idle'
+}
+
+function stopSpeaking() {
+  speakSeq++
+  ttsBuffer = ''
+  ttsPending = 0
+  if (window.speechSynthesis) window.speechSynthesis.cancel()
 }
 
 function toggleSpeech() {
   speechEnabled.value = !speechEnabled.value
   localStorage.setItem(STORAGE_KEY_SPEECH, speechEnabled.value ? 'true' : 'false')
+  if (!speechEnabled.value) stopSpeaking()
 }
 
 // ============================================================
@@ -497,6 +761,14 @@ async function handleClearChat() {
       cancelButtonText: '取消',
       type: 'warning',
     })
+
+    // 先删服务端 MongoDB 中该用户的聊天记录，失败则不清空并提示
+    try {
+      await clearChatHistory()
+    } catch {
+      ElMessage.error('服务端聊天记录删除失败，请稍后重试')
+      return
+    }
 
     chatStore.clearMessages()   // 清空聊天消息
     markdownCache.clear()       // 清空 Markdown 缓存
@@ -547,6 +819,23 @@ async function handleClearChat() {
 
 .speech-toggle {
   margin-top: 4px;
+}
+
+/* 录音中的麦克风按钮呼吸光圈 */
+.recording-pulse {
+  animation: recording-pulse 1.2s infinite;
+}
+
+@keyframes recording-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 108, 108, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(245, 108, 108, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 108, 108, 0);
+  }
 }
 
 .chat-messages {

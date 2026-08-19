@@ -42,3 +42,8 @@ ZHIPU_API_KEY = _get_config("ZHIPU_API_KEY")
 ZHIPU_VISION_MODEL = _get_config("ZHIPU_VISION_MODEL", "glm-4v-flash")
 ZHIPU_EMBEDDING_MODEL = _get_config("ZHIPU_EMBEDDING_MODEL", "embedding-3")
 ZHIPU_EMBEDDING_DIMENSIONS = int(_get_config("ZHIPU_EMBEDDING_DIMENSIONS", "512"))
+
+# MongoDB（AI 聊天对话历史存储，独立于传统后端 MySQL）
+MONGODB_URL = _get_config("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB = _get_config("MONGODB_DB", "meiwei_ai")
+CHAT_HISTORY_LIMIT = int(_get_config("AI_CHAT_HISTORY_LIMIT", "10"))

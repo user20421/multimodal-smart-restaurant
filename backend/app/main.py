@@ -18,6 +18,7 @@ from app.api.v1 import auth, menu, order, admin, system
 from app.ai import router as ai_router
 from app.ai.rag import manager as rag_manager
 from app.services.init_service import initialize_system
+from app.ai import chat_store
 
 # 导入所有模型，确保 Base.metadata 包含所有表
 import app.models  # noqa: F401
@@ -45,6 +46,10 @@ async def lifespan(app: FastAPI):
     # 初始化数据
     async with AsyncSessionLocal() as db:
         await initialize_system(db)
+
+    # MongoDB 连通性强校验（AI 聊天历史存储，必需依赖，连不上则拒绝启动）
+    await chat_store.check_connection()
+    logger.info("MongoDB 连接正常")
 
     # AI 知识库：向量库缺失或菜单变更时自动重建，并启动后台菜单变更监听
     await rag_manager.ensure_ready()

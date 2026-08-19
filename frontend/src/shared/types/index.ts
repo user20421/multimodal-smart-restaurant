@@ -110,7 +110,7 @@ export interface ChatResponse {
 }
 
 export interface ChatStreamEvent {
-  type: 'text' | 'done' | 'error'
+  type: 'text' | 'done' | 'error' | 'status'
   content?: string
   cart?: CartItem[]
   message?: string

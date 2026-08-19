@@ -15,6 +15,13 @@ export function sendChatMessage(payload: ChatRequest) {
 }
 
 /**
+ * 清空当前用户在服务端的聊天记录（MongoDB，按用户隔离）
+ */
+export function clearChatHistory() {
+  return api.delete('/ai/chat/history')
+}
+
+/**
  * SSE 流式聊天
  * 返回异步迭代器，每次 yield 一个流式事件 { type, content?, cart?, message? }
  */

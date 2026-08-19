@@ -19,7 +19,7 @@ if sys.platform == "win32":
     sys.stderr.reconfigure(encoding="utf-8")
 
 # 配置
-BACKEND_PORT = 8001
+BACKEND_PORT = 8000
 FRONTEND_PORT = 5173
 BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}"
 FRONTEND_URL = f"http://localhost:{FRONTEND_PORT}"
@@ -36,6 +36,12 @@ DOCKER_CONTAINERS = [
         "image": "mysql:latest",
         "ports": {"3306": "3306"},
         "env": {"MYSQL_ROOT_PASSWORD": "123456", "MYSQL_DATABASE": "meiwei_bot"},
+    },
+    {
+        # AI 聊天历史存储（必需依赖，与 MySQL 同级）
+        "name": "mongo-server",
+        "image": "mongo:latest",
+        "ports": {"27017": "27017"},
     },
 ]
 

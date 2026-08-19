@@ -9,7 +9,7 @@ import sys
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-base = 'http://127.0.0.1:8001'
+base = 'http://127.0.0.1:8000'
 # 验证码图片保存路径（脚本所在目录）
 CAPTCHA_IMAGE_PATH = Path(__file__).resolve().parent / 'captcha_sample.png'
 

@@ -30,3 +30,6 @@ numpy>=1.24.0
 
 # Cache
 redis>=5.0.0
+
+# MongoDB（AI 聊天历史存储，可选；scripts/test_db.py 连通性测试也用）
+pymongo>=4.6.0

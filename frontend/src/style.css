@@ -17,4 +17,16 @@ body {
 #app {
   width: 99%;
   height: 99%;
+  box-sizing: border-box;
+  /* 页面最外圈细线，颜色与侧边导航栏底色一致 */
+  border: 1px solid #304156;
+}
+
+/* 修复 Element Plus 弹窗（MessageBox/Dialog/Drawer）锁滚动时的滚动条补偿误判：
+   body 本身没有滚动条（应用由内部容器自行滚动），
+   EP 新版注入 width: calc(100% - 17px)、旧版注入 padding-right，
+   都会把 99% 宽且居中的 #app 向左挤，导致页面右侧空隙变大 */
+body.el-popup-parent--hidden {
+  width: 100% !important;
+  padding-right: 0 !important;
 }

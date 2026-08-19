@@ -25,6 +25,12 @@ def mask_username(username: str) -> str:
     return username[0] + "*" * (len(username) - 1)
 
 
+def fmt_price(price) -> str:
+    """价格显示：整数去掉小数部分（¥186 而非 ¥186.0）。"""
+    p = float(price)
+    return f"{p:.0f}" if p == int(p) else f"{p:.2f}"
+
+
 def order_status_text(status: str) -> str:
     """订单状态转中文"""
     mapping = {

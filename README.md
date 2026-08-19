@@ -33,7 +33,7 @@
 - **登录方式**：账号密码登录（带图片验证码）+ 人脸登录（仅存 128 维特征向量，不保存人脸照片）；
 - **智能点餐助手**：基于大模型的真实对话（百炼 DeepSeek）+ RAG 知识库（店铺/菜品/FAQ）+ 图片搜菜（智谱视觉模型）；
 - **账号体系**：默认管理员账号 `root` / `123456`，首次登录后强制修改密码；
-- **后端架构**：API → Service → Repository → Model，依赖 MySQL + Redis。
+- **后端架构**：API → Service → Repository → Model，依赖 MySQL + Redis + MongoDB。
 
 > 说明：顾客端“智能点餐助手”已接入真实大模型（见[核心功能](#核心功能)），传统点餐链路（购物车下单等）走传统 `POST /api/v1/order` 接口，两者完全解耦。相关 AI 配置见[配置说明](#配置说明)。
 
@@ -46,6 +46,7 @@
 | 前端   | Vue 3 + Vite + TypeScript + Element Plus + Pinia + Vue Router   |
 | 后端   | FastAPI + SQLAlchemy 2.0 (async) + Pydantic v2                  |
 | 数据库 | MySQL 8.0+                                                      |
+| 文档库 | MongoDB（AI 聊天历史）                                          |
 | 缓存   | Redis（图片验证码）                                             |
 | 导出   | reportlab（PDF）                                                |
 | 人脸识别 | face_recognition（dlib）                                       |
@@ -64,7 +65,8 @@
 - Node.js 18+
 - MySQL 8.0+
 - Redis
-- Docker（可选，`start.py` 会自动启动 mysql-server / redis-server 容器）
+- MongoDB（AI 聊天历史存储）
+- Docker（可选，`start.py` 会自动启动 mysql-server / redis-server / mongo-server 容器）
 
 ### 1. 克隆项目
 
@@ -140,11 +142,11 @@ python start.py --prod
 | 服务              | 地址                          |
 | ----------------- | ----------------------------- |
 | 前端（开发模式）  | http://localhost:5173         |
-| 后端 API          | http://127.0.0.1:8001         |
-| API 文档（Swagger）| http://127.0.0.1:8001/docs    |
-| API 文档（ReDoc）  | http://127.0.0.1:8001/redoc   |
+| 后端 API          | http://127.0.0.1:8000         |
+| API 文档（Swagger）| http://127.0.0.1:8000/docs    |
+| API 文档（ReDoc）  | http://127.0.0.1:8000/redoc   |
 
-> `start.py` 会自动检查并清理被占用的 `8001` / `5173` 端口，Windows 下还会将控制台编码设为 UTF-8。
+> `start.py` 会自动检查并清理被占用的 `8000` / `5173` 端口，Windows 下还会将控制台编码设为 UTF-8。
 
 ---
 
@@ -159,8 +161,12 @@ multimodal-smart-restaurant/
 │   └── sql/                  # 数据库初始化 SQL
 ├── scripts/
 │   ├── init_database.py      # 删除并重建数据库
-│   ├── test_db.py            # 数据库连通性测试
+│   ├── test_db.py            # 数据库连通性测试（MySQL / Redis / MongoDB）
 │   ├── verify_captcha_e2e.py # 验证码端到端测试
+│   ├── test_ai_agent_e2e.py  # AI 点餐端到端测试（加菜/换菜/下单/查订单）
+│   ├── test_ai_stream_e2e.py # AI 流式聊天端到端测试（SSE）
+│   ├── test_ai_multiagent_e2e.py # AI 多智能体端到端测试（路由/指代不清/表情检查）
+│   ├── test_ai_swap_e2e.py   # AI 换菜端到端测试（整项换/部分换/数量不足）
 │   ├── test_zhipu_embedding.py  # 智谱 Embedding-3 向量模型测试
 │   ├── test_zhipu_vision.py     # 智谱 GLM-4V-Flash 视觉模型测试
 │   ├── test_bailian_llm.py      # 阿里云百炼 DeepSeek LLM 测试
@@ -180,13 +186,20 @@ multimodal-smart-restaurant/
 │   │       ├── config.py     # AI 配置读取（.env 优先，环境变量兜底，占位符视为未设置）
 │   │       ├── schemas.py    # AI 模块请求/响应模型
 │   │       ├── image_search.py  # 图片搜菜：视觉识别 + 菜单比对
+│   │       ├── chat_store.py   # 聊天历史持久化（MongoDB，必需依赖，启动强校验）
+│   │       ├── sanitize.py     # 输出净化（确定性移除表情符号与“（微笑）”类舞台指示）
 │   │       ├── llm/          # 模型客户端（bailian.py 文本对话 / zhipu.py 视觉）
 │   │       ├── rag/          # RAG 知识库（loader/retriever/manager/sync_dishes）
 │   │       │   ├── data/     # 知识文档（store/dishes/faq/policy，dishes 由数据库同步生成）
 │   │       │   └── vectorstore/   # Chroma 持久化产物（运行生成，不提交）
-│   │       └── agent/        # （预留）Agent 工具层
+│   │       └── agent/        # 点餐多智能体（分级意图路由）
+│   │           ├── fastpath.py    # L1 正则快速路：整句完全匹配的简单意图确定性处理（加/减/换菜、清空、下单、查订单）
+│   │           ├── graph.py       # L2 LangGraph 多智能体图：router 分类节点 -> 购物车/订单/资讯/闲聊专员
+│   │           ├── prompts/       # 各角色提示词（router/cart/order/knowledge/chitchat.md）
+│   │           ├── context.py     # 请求级上下文（db / user_id / 购物车快照）
+│   │           └── tools/         # 工具层（菜单检索 / 购物车增删改 / 下单与订单查询 / RAG 检索）
 │   ├── static/               # 静态资源目录（保留挂载，当前无内容）
-│   ├── tests/                # 测试用例（API 测试 + 订单服务单元测试）
+│   ├── tests/                # 测试用例（API 测试 + 订单服务/AI 智能体单元测试）
 │   ├── .env                  # 环境变量（不提交）
 │   ├── pyproject.toml        # 项目元数据与 ruff/mypy 配置
 │   ├── requirements.txt      # 生产依赖
@@ -234,10 +247,14 @@ multimodal-smart-restaurant/
 
 独立子目录 `backend/app/ai/`，与传统后端完全解耦（传统代码只被调用、不被修改）：
 
-- **文本对话**：百炼 deepseek-v4-flash（LangChain ChatOpenAI，已用 `enable_thinking=false` 关闭思考模式防思维链泄漏）
-- **RAG 知识库**：店铺介绍/营业信息/FAQ/配送政策 + 39 道菜品文档（由数据库同步生成，保证单一事实源）；Chroma 向量检索 + BM25 关键词混合召回；启动时自动重建、商家改菜单后指纹轮询（5 分钟）自动重建、重建期间检索请求持锁排队
+- **文本对话**：百炼 deepseek-v4-flash（已用 `enable_thinking=false` 关闭思考模式防思维链泄漏），分级意图路由：L1 正则快速路处理简单确定的意图（如“来三份宫保鸡丁”“清空购物车”“确认下单”“最近5条订单”），不调 LLM；复杂意图进入 L2 多智能体图——router 分类节点（只看本句，拿不准即 unclear 请用户重述）分发到购物车专员（含下单）/ 订单查询专员 / 资讯顾问 / 闲聊节点
+- **对话操作购物车/订单**：工具层复用传统后端服务（只调用不修改），下单由 `order_service.create_order` 服务端校验兜底；**增删改/下单等写操作只依据用户当前这句话**，指代历史内容（如“刚才那个菜再来一份”）一律请用户一句话说清楚，不得猜测执行；**查询（购物车/订单/FAQ）为只读，可结合对话历史理解指代**；购物车通过 SSE `done` 事件快照回传前端落地；回复出口确定性移除表情符号与“（微笑）”类舞台指示标注
+- **对话历史**：MongoDB（独立库 `meiwei_ai`）按用户持久化；MongoDB 与 MySQL 同为必需依赖，启动时强校验连通性，连不上则服务无法启动；前端“清空对话”会同步删除该用户在 MongoDB 中的全部聊天记录
+- **RAG 知识库**：店铺介绍/营业信息/FAQ/配送政策 + 39 道菜品文档（由数据库同步生成，保证单一事实源）；Chroma 向量检索 + BM25 关键词混合召回；启动时自动重建、商家改菜单后指纹轮询（5 分钟）自动重建、重建期间检索请求持锁排队；由资讯顾问以 `search_knowledge` 工具按需调用
 - **图片搜菜**：智谱 GLM-4V-Flash 识别图片 → 是菜品则结合真实菜单由大模型比对推荐；不是菜品则提示重新上传
-- **SSE 流式输出**：打字机效果，前端聊天页（数字人头像 + 语音播报）
+- **SSE 流式输出**：GPT 风格打字机逐字渲染（SSE 原文进缓冲，前端 24ms 一帧匀速显示、积压自动加速），前端聊天页（机器人头像 + 语音播报开关）
+- **语音播报**：浏览器内置 speechSynthesis（Web Speech API），零后端依赖；SSE 流式文本按句切分即时报播，句间由浏览器原生队列连续播放
+- **语音输入**：输入框左侧麦克风按钮，浏览器 SpeechRecognition 实时转文字填入输入框；开始录音自动打断播报，4 秒无声音自动停止
 
 ---
 
@@ -258,10 +275,11 @@ multimodal-smart-restaurant/
 | GET    | `/api/v1/orders`                 | 我的订单（分页） |
 | POST   | `/api/v1/ai/chat`                | 智能聊天（同步） |
 | POST   | `/api/v1/ai/chat/stream`         | 智能聊天（SSE 流式，支持图片搜菜） |
+| DELETE | `/api/v1/ai/chat/history`        | 清空当前用户的聊天记录（MongoDB） |
 | GET    | `/api/v1/admin/menu`             | 商家菜品管理     |
 | GET    | `/api/v1/admin/orders`           | 商家订单管理     |
 
-完整接口文档见启动后的 Swagger UI：`http://127.0.0.1:8001/docs`
+完整接口文档见启动后的 Swagger UI：`http://127.0.0.1:8000/docs`
 
 ---
 
@@ -306,6 +324,11 @@ ZHIPU_VISION_MODEL=glm-4v-flash        # 视觉模型（免费）
 DASHSCOPE_API_KEY=your-dashscope-api-key-here
 BAILIAN_LLM_MODEL=deepseek-v4-flash-0731
 BAILIAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+# MongoDB（AI 聊天历史存储，必需依赖，后端启动时强校验连通性）
+# MONGODB_URL=mongodb://localhost:27017
+# MONGODB_DB=meiwei_ai
+# AI_CHAT_HISTORY_LIMIT=10
 ```
 
 > AI 连通性验证脚本：`scripts/test_zhipu_embedding.py`、`scripts/test_zhipu_vision.py`、`scripts/test_bailian_llm.py`（需先设置对应环境变量）。
@@ -367,7 +390,7 @@ python start.py --prod
 
 1. 自动检查 Node.js 环境；
 2. 执行 `npm run build` 构建前端；
-3. 让 FastAPI 在 `8001` 端口同时提供 API 与静态文件服务。
+3. 让 FastAPI 在 `8000` 端口同时提供 API 与静态文件服务。
 
 ### 手动部署
 
@@ -378,7 +401,7 @@ npm run build
 
 cd ../backend
 # 设置环境变量后启动
-uvicorn app.main:app --host 0.0.0.0 --port 8001
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 > 生产环境建议通过 Nginx / Caddy 反向代理，并配置 HTTPS。
@@ -387,17 +410,17 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001
 
 ## 常见问题
 
-### Q：启动时提示端口 8001 被占用？
+### Q：启动时提示端口 8000 被占用？
 
-`python start.py` 会自动尝试结束占用 8001 的进程。若失败，可手动结束：
+`python start.py` 会自动尝试结束占用 8000 的进程。若失败，可手动结束：
 
 ```bash
 # Windows
-netstat -ano | findstr :8001
+netstat -ano | findstr :8000
 taskkill /PID <PID> /F
 
 # macOS / Linux
-lsof -ti:8001 | xargs kill -9
+lsof -ti:8000 | xargs kill -9
 ```
 
 ### Q：Windows 控制台日志显示乱码？
