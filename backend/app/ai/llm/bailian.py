@@ -19,9 +19,10 @@ SYSTEM_PROMPT = (
 def get_chat_llm(streaming: bool = False) -> ChatOpenAI:
     """获取百炼对话模型实例（LangChain ChatOpenAI）。
 
-    deepseek-v4-flash 是混合思考模型且默认开启思考，思考过程可能泄漏到
-    回复正文中（如 "（是的。）（输出。）" 这类内心独白），且显著增加耗时。
-    聊天场景不需要思考链，通过 extra_body 显式关闭。
+    qwen3.7-flash 系列（当前 qwen3.7-flash-2026-07-15）是混合思考模型且默认开启
+    思考：思考链输出在独立的 reasoning_content 字段（不混入 content、无泄漏），
+    但实测（2026-08-20 探针）开启后输出 token 暴涨（51→885）且耗时增加数倍。
+    聊天场景不需要思考链，通过 extra_body 显式关闭，响应更快更省。
     """
     return ChatOpenAI(
         model=config.BAILIAN_LLM_MODEL,

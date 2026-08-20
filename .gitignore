@@ -52,3 +52,6 @@ backend/app/ai/rag/vectorstore/
 # OS
 .DS_Store
 Thumbs.db
+
+# 独立用途数据目录（非本项目产物，不入库）
+mmsr-data-classification/

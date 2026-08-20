@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 _MAX_FETCH = 100
 
 # 下单类动作词（必须出现在用户当前这句话中，place_order 才允许执行）
-_ORDER_WORDS = ("下单", "结算", "买单", "付款", "交钱")
+_ORDER_WORDS = ("下单", "结算", "买单", "结账", "付款", "付钱", "交钱")
 
 
 def _format_orders(orders: List[Order], empty_text: str) -> str:

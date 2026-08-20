@@ -1,12 +1,15 @@
 """
 菜单检索工具
 
-resolve_dish 为纯函数，供 fastpath 与工具层共用：
-先精确匹配菜名，再模糊搜索（名称/标签/描述），多候选返回歧义列表。
+resolve_dish 为纯函数，供 fastpath 与工具层共用，证据分级：
+精确菜名 -> 名称包含（高频品名优先，如 米饭 -> 白米饭）-> tags -> description。
+description 为弱证据（宣传语偶然命中），只出候选列表，绝不单独构成唯一命中；
+多候选返回歧义列表，交由上层消歧或让位。
 """
 from typing import List, Optional, Tuple
 
 from langchain_core.tools import tool
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.agent.context import AgentContext
@@ -21,12 +24,12 @@ _SPICY_TEXT = {0: "不辣", 1: "微辣", 2: "中辣", 3: "特辣"}
 async def resolve_dish(
     db: AsyncSession, keyword: str
 ) -> Tuple[Optional[MenuItem], List[MenuItem]]:
-    """按关键词解析菜品。
+    """按关键词解析菜品（证据分级：精确菜名 > 名称包含 > tags > description）。
 
     返回 (唯一命中的菜品或 None, 候选列表)。
-    - 精确命中或模糊搜索仅 1 个候选 -> (item, [item])
+    - 精确命中 / 名称或 tags 唯一候选 -> (item, [item])
     - 0 命中 -> (None, [])
-    - 多候选歧义 -> (None, candidates)
+    - 多候选歧义，或仅 description 弱命中 -> (None, candidates)
     """
     keyword = (keyword or "").strip(" ，。,.!！?？")
     if not keyword:
@@ -34,10 +37,27 @@ async def resolve_dish(
     item = await menu_item_repo.get_by_name(db, keyword)
     if item:
         return item, [item]
-    candidates = list(await menu_item_repo.search_by_keyword(db, keyword))
-    if len(candidates) == 1:
-        return candidates[0], candidates
-    return None, candidates
+    # 名称包含优先：点菜消歧场景下，名称候选比 tags/描述噪音更贴近用户本意
+    name_hits = list(
+        (await db.execute(select(MenuItem).where(MenuItem.name.contains(keyword)))).scalars().all()
+    )
+    if len(name_hits) == 1:
+        return name_hits[0], name_hits
+    if name_hits:
+        return None, name_hits
+    # 结构化 tags 为中等证据：唯一可命中，多候选即歧义
+    tag_hits = list(
+        (await db.execute(select(MenuItem).where(MenuItem.tags.contains(keyword)))).scalars().all()
+    )
+    if len(tag_hits) == 1:
+        return tag_hits[0], tag_hits
+    if tag_hits:
+        return None, tag_hits
+    # description 为弱证据（宣传语偶然命中）：只出候选供上层消歧，不单独构成命中
+    desc_hits = list(
+        (await db.execute(select(MenuItem).where(MenuItem.description.contains(keyword)))).scalars().all()
+    )
+    return None, desc_hits
 
 
 def _describe(item: MenuItem) -> str:
