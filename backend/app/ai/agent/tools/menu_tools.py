@@ -14,6 +14,9 @@ from app.core.database import AsyncSessionLocal
 from app.models.menu import MenuItem
 from app.repositories.menu_repo import menu_item_repo
 
+# 辣度等级 -> 展示文本（与数据库 spicy_level 注释一致：0不辣 1微辣 2中辣 3特辣）
+_SPICY_TEXT = {0: "不辣", 1: "微辣", 2: "中辣", 3: "特辣"}
+
 
 async def resolve_dish(
     db: AsyncSession, keyword: str
@@ -51,7 +54,8 @@ def build_menu_tools(ctx: AgentContext) -> list:
         async with AsyncSessionLocal() as db:
             item, candidates = await resolve_dish(db, keyword)
         if item is not None:
-            return f"唯一命中：{_describe(item)}，辣度 {item.spicy_level}/3"
+            spicy = _SPICY_TEXT.get(item.spicy_level, "未知")
+            return f"唯一命中：{_describe(item)}，辣度 {spicy}（固定属性，顾客不可选择或调整）"
         if not candidates:
             return f"菜单中没有找到与“{keyword}”相关的菜品。"
         lines = "\n".join(f"- {_describe(c)}" for c in candidates[:5])

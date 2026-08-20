@@ -155,7 +155,9 @@ def build_place_order_tool(ctx: AgentContext) -> list:
     @tool("place_order")
     async def place_order(remark: str = "") -> str:
         """用当前购物车的内容创建订单（下单）。
-        仅当用户明确表达下单/结算意图时调用；remark 为用户备注（可选）。
+        仅当用户明确表达下单/结算意图时调用；remark 为订单备注（可选，仅用于发票抬头、
+        过敏忌口等事项，不用于辣度或口味调整——本店每道菜辣度固定，不支持备注改辣度，
+        也不要向顾客确认辣度）。
         注意：用户当前这句话必须包含“下单/结算/买单”等明确动作词，否则工具会拒绝执行。
         """
         if not any(w in (ctx.message or "") for w in _ORDER_WORDS):

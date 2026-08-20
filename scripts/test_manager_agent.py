@@ -2,10 +2,12 @@
 """
 "餐厅经理"（混合意图 agent，更强模型 BAILIAN_LLM_MODEL_X）端到端冒烟测试
 
-直连真实数据库与真实大模型，验证三件事：
+直连真实数据库与真实大模型，验证四件事：
 1. 混合意图一站式办妥：咨询营业时间 + 加两道菜 -> 回复覆盖两件事，购物车快照被修改
 2. 混合意图中的写操作指代不清 -> 咨询照答，写操作被工具层硬校验拒绝且回复如实说明
 3. 过多过杂的矛盾需求 -> 路由 unclear，固定话术兜底（宁愿不做，不可做错）
+4. 辣度是商家设定的固定属性：点辣菜 + 问辣度 -> 直接加菜并如实告知辣度，
+   不得向顾客确认辣度、不得要求备注辣度
 
 注意：本脚本真实调用模型 B（产生 token 费用）并连接 MySQL，请确认数据库已启动。
 用法:
@@ -36,6 +38,20 @@ async def _pick_dishes() -> list[str]:
             select(MenuItem.name).where(MenuItem.stock > 0).order_by(MenuItem.id).limit(2)
         )
         return [row[0] for row in result.all()]
+
+
+async def _pick_spicy_dish() -> tuple[str, int]:
+    """从真实菜单取一道辣度 >= 2（中辣/特辣）且有库存的菜。"""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(MenuItem.name, MenuItem.spicy_level)
+            .where(MenuItem.stock > 0, MenuItem.spicy_level >= 2)
+            .order_by(MenuItem.spicy_level.desc(), MenuItem.id)
+            .limit(1)
+        )
+        row = result.first()
+        assert row, "菜单中没有辣度 >= 2 的在售菜品，无法执行场景 4"
+        return row[0], row[1]
 
 
 async def _run(message: str) -> tuple[str, list]:
@@ -90,6 +106,31 @@ async def main() -> int:
     else:
         print("        [失败] 未走 unclear 兜底")
         ok = False
+    print("-" * 72)
+
+    # 场景 4：辣度固定属性 —— 点辣菜 + 问辣度（混合意图 -> 经理）
+    # 预期：直接加菜、如实告知菜单标注的辣度，绝不出现"确认辣度/备注辣度"类话术
+    spicy_dish, spicy_level = await _pick_spicy_dish()
+    msg4 = f"来一份{spicy_dish}，这道菜辣吗"
+    print(f"[场景4] 辣度固定（{spicy_dish}，辣度 {spicy_level}/3）: {msg4}")
+    reply4, cart4 = await _run(msg4)
+    print(f"        回复: {reply4}")
+    print(f"        购物车: {cart4}")
+    # 正确回复不会出现的典型错误话术（确认辣度/让顾客选辣度/把辣度当备注）
+    bad_phrases = [
+        "确认辣度", "辣度未确认", "辣度还没", "备注辣度", "做多辣",
+        "几成辣", "要什么辣度", "选什么辣度", "选哪个辣度",
+        "做微辣可以", "做中辣可以", "做特辣可以",
+    ]
+    in_cart4 = {e.get("name"): e.get("quantity") for e in cart4}
+    if in_cart4.get(spicy_dish) != 1:
+        print("        [失败] 菜未按数量加入购物车")
+        ok = False
+    elif any(p in reply4 for p in bad_phrases):
+        print("        [失败] 回复中出现了确认/备注辣度的话术（辣度应为固定属性）")
+        ok = False
+    else:
+        print("        [通过] 直接加菜并如实告知辣度，未向顾客确认辣度 ✔")
     print("=" * 72)
 
     if ok:
