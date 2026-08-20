@@ -98,7 +98,7 @@
         </a>
       </div>
       <div class="info-item">
-        <span class="info-label">项目亮点：</span>全栈系统 + 多智能体 + 图像识别 + 人脸登录 + 语音合成
+        <span class="info-label">项目亮点：</span>全栈系统 + 多智能体 + 图像理解 + 人脸登录 + 语音合成
       </div>
       <div class="info-item">
         <span class="info-label">作者邮箱：</span>xiaoy376@qq.com
@@ -108,6 +108,12 @@
       </div>
       <div class="info-item">
         <span class="info-label">商家端密码：</span>123456
+      </div>
+      <div class="info-item optional-llm">
+        <span class="info-label">（可选）大模型微调项目 Github 地址：</span>
+        <a href="https://github.com/user20421/mmsr-data-classification" target="_blank" rel="noopener">
+          github.com/user20421/mmsr-data-classification
+        </a>
       </div>
     </div>
 
@@ -531,7 +537,7 @@ async function captureAndLogin() {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  max-width: 470px;
+  max-width: 390px;
   padding: 14px 18px;
   background: #ffffff;
   border-radius: 8px;
@@ -561,6 +567,10 @@ async function captureAndLogin() {
 
 .info-item a:hover {
   text-decoration: underline;
+}
+
+.info-item.optional-llm a {
+  display: block;
 }
 
 @media (max-width: 900px) {
