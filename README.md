@@ -490,3 +490,13 @@ Docker 中的 MySQL 默认使用 UTC 时区，`created_at` 存的是 UTC 时间�
 - **启动时自动处理**：向量库缺失（如新部署）或菜单指纹变化时自动重建，无需人工干预；
 - **商家修改菜品**：后台任务每 5 分钟轮询菜单指纹（数量 + 最大更新时间），变化即自动同步菜品文档并重建向量库；
 - **手工修改静态文档**（`rag/data/store|faq|policy/`）：指纹管不到，需手动重建：`cd backend && python -m app.ai.rag.loader`，或删除 `vectorstore/` 目录后重启后端。
+
+---
+
+## 致谢与参考
+
+本项目在实现过程中使用了以下个人 / 社区作者的开源工作，在此致谢（Docker、Conda、Python、LangChain、阿里云百炼、智谱 AI 等平台级基础设施不再逐一列举）：
+
+- **人脸登录**：[face_recognition](https://github.com/ageitgey/face_recognition)（作者 Adam Geitgey）——人脸检测、128 维特征提取与比对的核心库；其底层人脸算法模型来自 [dlib](http://dlib.net/)（作者 Davis King）
+- **PDF 报表导出**：ReportLab 开源工具库——商家端订单 / 统计报表的 PDF 生成
+
