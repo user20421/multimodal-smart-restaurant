@@ -367,7 +367,8 @@ class TestChatQuota:
         r = client.get("/api/v1/admin/user-quotas", headers=auth_headers(sa_token))
         assert r.status_code == 200
         item = next(i for i in r.json() if i["username"] == uname)
-        assert item["chat_quota"] == 99
+        from app.ai.quota import INITIAL_QUOTA
+        assert item["chat_quota"] == INITIAL_QUOTA - 1
 
     def test_quota_exhausted_returns_400(self):
         """次数为 0 时发送，返回 400 及提示文案"""
@@ -391,7 +392,8 @@ class TestChatQuota:
 
         r = client.post(f"/api/v1/admin/user-quotas/{uid}/recharge", headers=auth_headers(sa_token))
         assert r.status_code == 200
-        assert r.json()["chat_quota"] == 200
+        from app.ai.quota import INITIAL_QUOTA, RECHARGE_AMOUNT
+        assert r.json()["chat_quota"] == INITIAL_QUOTA + RECHARGE_AMOUNT
 
         admin_token = login_and_get_token("root", "123456")
         r = client.get("/api/v1/admin/user-quotas", headers=auth_headers(admin_token))

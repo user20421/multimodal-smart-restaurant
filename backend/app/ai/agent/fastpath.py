@@ -176,12 +176,15 @@ async def try_handle(ctx: AgentContext, message: str) -> Optional[str]:
     if not text:
         return None
 
-    # 1. 清空购物车
-    if any(p.match(text) for p in _CLEAR_PATTERNS):
+    # 1. 清空购物车：高危操作，口令必须逐字精确（整句就是"清空购物车"五个字才执行）；
+    #    其他清空意图的变体表述一律不执行，统一引导用户说出准确口令
+    if ct.is_clear_command(text):
         if not ctx.cart:
             return "购物车本来就是空的，去看看有什么想吃的吧。"
         ct.cart_clear(ctx)
         return "好的，购物车已清空。"
+    if any(p.match(text) for p in _CLEAR_PATTERNS):
+        return ct.CLEAR_ASK_TEXT
 
     # 2. 查看购物车
     if any(p.match(text) for p in _VIEW_CART_PATTERNS):

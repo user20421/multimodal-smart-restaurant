@@ -24,7 +24,7 @@ class User(Base):
     )
     face_encoding = Column(JSON, nullable=True, comment="人脸特征向量（128维）")
     face_image_url = Column(String(255), nullable=True, comment="人脸头像存储路径")
-    chat_quota = Column(Integer, nullable=False, default=100, comment="智能聊天剩余次数（普通用户初始100）")
+    chat_quota = Column(Integer, nullable=False, default=30, comment="智能聊天剩余次数（普通用户初始30）")
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
 

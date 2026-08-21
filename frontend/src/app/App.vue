@@ -96,6 +96,7 @@ import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { useCartStore } from '@/features/cart/stores/cart.store'
 import { useChatStore } from '@/features/chat/stores/chat.store'
+import { clearChatHistory } from '@/features/chat/api/chat.api'
 import { User, SwitchButton } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -134,10 +135,18 @@ async function handleLogout() {
   } catch {
     return // 用户点击取消，不退出
   }
-  authStore.logout()
+  // 退出登录时清除该用户的 AI 聊天历史（顺序敏感，均需在 logout 清空 token/auth 之前）：
+  // 1) 服务端 MongoDB 聊天记录（接口需携带 token）；失败不阻塞退出，仅记录日志
+  // 2) 本地聊天记录（此时 localStorage 中仍是该用户的存储 key）
+  try {
+    await clearChatHistory()
+  } catch (e) {
+    console.error('清除服务端聊天历史失败', e)
+  }
   chatStore.clearMessages()
-  // 只清空内存中的购物车，保留 localStorage（按用户隔离）
-  cartStore.items = []
+  // 清空购物车：内存 + 该用户的 localStorage（save 依赖 auth 记录定位用户 key，需在 logout 前调用）
+  cartStore.clearCart()
+  authStore.logout()
   router.push('/login')
 }
 </script>

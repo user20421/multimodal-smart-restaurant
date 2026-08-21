@@ -1,7 +1,7 @@
 """
 智能聊天次数配额管理（AI 模块）
 
-每个普通用户（customer）初始 100 次发送次数，每次发送扣减 1；
+每个普通用户（customer）初始 30 次发送次数，每次发送扣减 1；
 次数为 0 时抛出业务异常，前端弹窗提示联系开发人员。
 配额的查看、充值与删除用户由超级管理员在管理端操作（api/v1/admin.py 调用）。
 """
@@ -15,7 +15,7 @@ from app.models.user import User
 QUOTA_EXCEEDED_MESSAGE = "您的智能聊天次数不足，请联系开发人员"
 
 # 新用户初始次数 / 超管单次充值次数
-INITIAL_QUOTA = 100
+INITIAL_QUOTA = 30
 RECHARGE_AMOUNT = 100
 
 

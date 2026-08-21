@@ -10,6 +10,7 @@ build_cart_tools 生成 LLM 可调用的 LangChain 工具（闭包持有 ctx）�
 from typing import Optional
 
 from langchain_core.tools import tool
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.agent.context import AgentContext
 from app.ai.agent.tools.menu_tools import resolve_dish
@@ -21,8 +22,17 @@ from app.utils.formatters import fmt_price
 # 写操作"本句表达"守卫（确定性硬约束，不依赖 LLM 自觉遵守提示词）
 # ============================================================
 
-# 清空/删除类动作词
-_CLEAR_WORDS = ("清空", "清除", "删除", "删掉", "去掉", "拿掉", "移除", "不要")
+# 清空购物车口令：高危操作，整句恰好是这五个字才执行，其余表述一律引导用户说出准确口令
+CLEAR_COMMAND = "清空购物车"
+CLEAR_ASK_TEXT = (
+    "抱歉，清空购物车的操作还没有执行。"
+    "请您明确说出“清空购物车”，我才能为您执行该操作。"
+)
+
+
+def is_clear_command(msg: str) -> bool:
+    """整句（剥掉首尾空白与句尾标点）恰好是“清空购物车”五个字才算有效口令。"""
+    return (msg or "").strip().strip(" 。！？!?,，~～") == CLEAR_COMMAND
 
 
 def write_refusal_text(example: str) -> str:
@@ -47,6 +57,63 @@ def guard_write_op(ctx: AgentContext, *must_hit: str, example: str) -> Optional[
     if all(kw in msg for kw in must_hit):
         return None
     return write_refusal_text(example)
+
+
+# 简称证据的最小长度：单字过于宽泛（如"汁""鱼"），不足以构成指代依据
+_MIN_ALIAS_LEN = 2
+
+
+async def sentence_mentions_item(db: AsyncSession, msg: str, item: MenuItem) -> bool:
+    """判断用户当前这句话是否以"合理简称"提到了该菜品。
+
+    依据：句中存在菜品名的子串（≥2 字），且该子串经 resolve_dish 唯一命中本菜品。
+    唯一命中是硬条件——如菜单同时有"鲜榨西瓜汁"和"冰镇西瓜露"时，
+    句中的"西瓜"不能单独指向任何一道，不构成依据。
+    """
+    name = (item.name or "").strip()
+    if not msg or len(name) < _MIN_ALIAS_LEN:
+        return False
+    # 候选简称：菜品名中出现在本句里的子串，长的优先（证据更强）
+    aliases = sorted(
+        {
+            name[i:j]
+            for i in range(len(name))
+            for j in range(i + _MIN_ALIAS_LEN, len(name) + 1)
+            if name[i:j] in msg
+        },
+        key=len,
+        reverse=True,
+    )
+    for alias in aliases:
+        hit, _ = await resolve_dish(db, alias)
+        if hit is not None and hit.id == item.id:
+            return True
+    return False
+
+
+async def guard_dish_write_op(
+    ctx: AgentContext,
+    db: AsyncSession,
+    dish_name: str,
+    item: Optional[MenuItem],
+    *,
+    example: str,
+) -> Optional[str]:
+    """菜品写操作的前置校验：操作对象必须在用户当前这句话里有依据。
+
+    放行条件（任一）：
+    - dish_name 字面出现在本句（用户原始叫法，guard_write_op 的原有语义）；
+    - dish_name 是菜单全称，而用户本句用合理简称提到了这道菜且简称唯一指向它
+      （如用户说"西瓜汁"，LLM 经搜索后传"鲜榨西瓜汁"）。
+
+    其余情况维持拒绝：操作对象来自对话历史或模型猜测时一律不得执行。
+    """
+    refusal = guard_write_op(ctx, dish_name, example=example)
+    if refusal is None:
+        return None
+    if item is not None and await sentence_mentions_item(db, ctx.message or "", item):
+        return None
+    return refusal
 
 
 # ============================================================
@@ -128,17 +195,20 @@ def build_cart_tools(ctx: AgentContext) -> list:
     @tool("add_to_cart")
     async def add_to_cart(dish_name: str, quantity: int = 1) -> str:
         """把菜品加入购物车（或在已有数量上累加）。
-        dish_name 为菜品名称，quantity 为正整数份数。
+        dish_name 填用户这句话里的原始叫法（如用户说"西瓜汁"就传"西瓜汁"，
+        即使菜单全称是"鲜榨西瓜汁"），工具会自动匹配菜单；quantity 为正整数份数。
         数量不明确时必须先向用户确认，不要自行猜测。
-        注意：dish_name 必须出现在用户当前这句话里，否则工具会拒绝执行。
+        注意：dish_name 必须出自用户当前这句话（原名或合理简称均可），否则工具会拒绝执行。
         """
-        refusal = guard_write_op(ctx, dish_name, example=f"来两份{dish_name}")
-        if refusal:
-            return refusal
         if quantity <= 0:
             return "数量必须为正整数，未执行任何操作。"
         async with AsyncSessionLocal() as db:
             item, candidates = await resolve_dish(db, dish_name)
+            refusal = await guard_dish_write_op(
+                ctx, db, dish_name, item, example=f"来两份{dish_name}"
+            )
+        if refusal:
+            return refusal
         if item is None:
             if candidates:
                 names = "、".join(c.name for c in candidates[:5])
@@ -150,13 +220,16 @@ def build_cart_tools(ctx: AgentContext) -> list:
     @tool("remove_from_cart")
     async def remove_from_cart(dish_name: str) -> str:
         """把菜品从购物车中移除（整项删除）。
-        注意：dish_name 必须出现在用户当前这句话里，否则工具会拒绝执行。
+        dish_name 填用户这句话里的原始叫法（原名或合理简称均可）。
+        注意：dish_name 必须出自用户当前这句话，否则工具会拒绝执行。
         """
-        refusal = guard_write_op(ctx, dish_name, example=f"把{dish_name}移除")
-        if refusal:
-            return refusal
         async with AsyncSessionLocal() as db:
             item, candidates = await resolve_dish(db, dish_name)
+            refusal = await guard_dish_write_op(
+                ctx, db, dish_name, item, example=f"把{dish_name}移除"
+            )
+        if refusal:
+            return refusal
         target = item
         if target is None:
             # 菜品可能已不在菜单但仍躺在购物车里，按购物车里的名字再试一次
@@ -175,16 +248,19 @@ def build_cart_tools(ctx: AgentContext) -> list:
     @tool("set_dish_quantity")
     async def set_dish_quantity(dish_name: str, quantity: int) -> str:
         """把购物车中某菜品的数量设置为指定值；quantity 为 0 时等价于移除。
-        仅当用户明确给出目标数量时使用。
-        注意：dish_name 必须出现在用户当前这句话里，否则工具会拒绝执行。
+        仅当用户明确给出目标数量时使用；dish_name 填用户这句话里的原始叫法
+        （原名或合理简称均可）。
+        注意：dish_name 必须出自用户当前这句话，否则工具会拒绝执行。
         """
-        refusal = guard_write_op(ctx, dish_name, example=f"把{dish_name}改成2份")
-        if refusal:
-            return refusal
         if quantity < 0:
             return "数量不能为负数，未执行任何操作。"
         async with AsyncSessionLocal() as db:
             item, candidates = await resolve_dish(db, dish_name)
+            refusal = await guard_dish_write_op(
+                ctx, db, dish_name, item, example=f"把{dish_name}改成2份"
+            )
+        if refusal:
+            return refusal
         target = item
         if target is None:
             entry = cart_find_by_name(ctx, dish_name.strip())
@@ -202,12 +278,16 @@ def build_cart_tools(ctx: AgentContext) -> list:
 
     @tool("clear_cart")
     async def clear_cart_tool() -> str:
-        """清空购物车（仅当用户明确要求时）。
-        注意：用户当前这句话必须同时包含"购物车"和清空类动作词，否则工具会拒绝执行。
+        """清空购物车（高危操作，口令必须逐字精确）。
+        注意：仅当用户当前整句恰好是"清空购物车"五个字时才可执行；
+        其他任何表达清空意图的说法都必须拒绝，并请用户说出准确口令。
         """
-        msg = ctx.message or ""
-        if "购物车" not in msg or not any(w in msg for w in _CLEAR_WORDS):
-            return write_refusal_text("清空购物车")
+        if not is_clear_command(ctx.message or ""):
+            return (
+                CLEAR_ASK_TEXT
+                + "（规则：清空口令必须逐字精确；请把这句话如实转告用户，"
+                  "严禁声称“已清空”或“我这就为您清空”。）"
+            )
         if not ctx.cart:
             return "购物车本来就是空的。"
         cart_clear(ctx)

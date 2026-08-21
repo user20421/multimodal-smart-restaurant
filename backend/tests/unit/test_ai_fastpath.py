@@ -189,6 +189,16 @@ async def test_clear_cart(db, sample_data):
     assert ctx.cart == []
 
 
+async def test_clear_cart_variants_not_executed(db, sample_data):
+    """清空口令必须逐字精确：变体表述一律不执行，引导用户说出"清空购物车\""""
+    for variant in ("把购物车清空", "帮我清空购物车", "请清空我的购物车", "购物车不要了", "重新点"):
+        cart = [{"menu_item_id": 1, "name": "宫保鸡丁", "quantity": 1, "unit_price": 38.0}]
+        ctx = make_ctx(db, sample_data["user"].id, cart)
+        reply = await fastpath.try_handle(ctx, variant)
+        assert reply and "还没有执行" in reply and "明确说出" in reply, variant
+        assert len(ctx.cart) == 1, variant
+
+
 async def test_view_cart(db, sample_data):
     cart = [{"menu_item_id": 1, "name": "宫保鸡丁", "quantity": 2, "unit_price": 38.0}]
     ctx = make_ctx(db, sample_data["user"].id, cart)

@@ -111,9 +111,43 @@ def _parse_route(text: str) -> str:
     return "unclear"
 
 
+# 写能力节点（cart/manager）的确定性提示：贴近生成点注入，强化两条类级规则——
+# 信息齐全就直接执行（禁止"要我加吗"式悬空确认：其简短回答无法被单句路由正确处理），
+# 以及未接地不声称（工具未成功前不得声称完成）。
+_WRITE_NODE_NOTE = (
+    "[系统提示] 本句信息齐全时直接调用工具执行并汇报结果，不要就是否执行向用户反问是非确认"
+    "（如'要我加吗''您是要……吗'）；未调用工具或工具未执行成功时，回复不得声称已完成任何操作。"
+)
+
+# 无写能力节点（order/knowledge/chitchat）的确定性接地提示：注入在用户消息最前面
+# （位于历史之后、生成之前），防止节点被历史中的待办话题诱导，
+# 声称执行了自己根本没有的写操作能力（"好的，已为您记录"类幻觉）。
+_NO_WRITE_GROUNDING_NOTE = (
+    "[系统提示] 你不具备、本轮也不会执行任何购物车或订单的写操作"
+    "（加菜/减菜/改数量/清空/下单）。若用户这句话只是对之前话题的简短回应"
+    "（如'是的''好的''可以'），不得声称已记录、已加菜、已下单或已移除任何内容；"
+    "如实说明尚未做任何操作，并引导用户用一句完整的话说出需求"
+    "（包含菜品名称和数量，如'来两份宫保鸡丁'）。"
+)
+
+
 def _cart_context_message(ctx: AgentContext, message: str) -> HumanMessage:
-    """把购物车快照作为 [上下文] 前缀并入用户消息。"""
-    return HumanMessage(content=f"[上下文] {cart_summary_text(ctx.cart)}\n\n{message}")
+    """写能力节点（cart/manager）：确定性提示 + 购物车快照作为前缀并入用户消息。"""
+    return HumanMessage(
+        content=f"{_WRITE_NODE_NOTE}\n\n[上下文] {cart_summary_text(ctx.cart)}\n\n{message}"
+    )
+
+
+def _no_write_context_message(message: str) -> HumanMessage:
+    """无写能力节点（knowledge/chitchat）：确定性注入接地提示。"""
+    return HumanMessage(content=f"{_NO_WRITE_GROUNDING_NOTE}\n\n{message}")
+
+
+def _readonly_context_message(ctx: AgentContext, message: str) -> HumanMessage:
+    """只读查询节点（order）：确定性接地提示 + 购物车快照上下文。"""
+    return HumanMessage(
+        content=f"{_NO_WRITE_GROUNDING_NOTE}\n\n[上下文] {cart_summary_text(ctx.cart)}\n\n{message}"
+    )
 
 
 def build_graph(ctx: AgentContext):
@@ -170,7 +204,7 @@ def build_graph(ctx: AgentContext):
         # 订单专员为只读查询：带历史以理解“那笔订单”等指代
         messages = [
             *_history_to_messages(state["history"]),
-            _cart_context_message(ctx, state["message"]),
+            _readonly_context_message(ctx, state["message"]),
         ]
         result = await order_agent.ainvoke({"messages": messages})
         return {"reply": _normalize_content(result["messages"][-1].content)}
@@ -179,7 +213,7 @@ def build_graph(ctx: AgentContext):
         # 只读咨询：可以带历史理解"这道菜"之类的指代
         messages = [
             *_history_to_messages(state["history"]),
-            HumanMessage(content=state["message"]),
+            _no_write_context_message(state["message"]),
         ]
         result = await knowledge_agent.ainvoke({"messages": messages})
         return {"reply": _normalize_content(result["messages"][-1].content)}
@@ -189,7 +223,7 @@ def build_graph(ctx: AgentContext):
         messages = [
             SystemMessage(content=CHITCHAT_PROMPT),
             *_history_to_messages(state["history"]),
-            HumanMessage(content=state["message"]),
+            _no_write_context_message(state["message"]),
         ]
         parts: list[str] = []
         async for chunk in llm.astream(messages):

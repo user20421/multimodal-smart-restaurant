@@ -33,6 +33,19 @@ engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+@pytest.fixture(autouse=True)
+def _patch_tool_sessions(monkeypatch):
+    """LangChain 工具内部用各自模块的全局 AsyncSessionLocal 建独立会话（防并行冲突）；
+    测试中统一替换为 SQLite 内存库会话，使工具级用例自包含、不依赖本地 MySQL 数据。"""
+    from app.ai.agent.tools import cart_tools as cart_tools_mod
+    from app.ai.agent.tools import menu_tools as menu_tools_mod
+    from app.ai.agent.tools import order_tools as order_tools_mod
+
+    monkeypatch.setattr(cart_tools_mod, "AsyncSessionLocal", TestSessionLocal)
+    monkeypatch.setattr(menu_tools_mod, "AsyncSessionLocal", TestSessionLocal)
+    monkeypatch.setattr(order_tools_mod, "AsyncSessionLocal", TestSessionLocal)
+
+
 @pytest.fixture(scope="function")
 async def db():
     async with engine.begin() as conn:
@@ -258,12 +271,13 @@ async def test_set_quantity_refuses_when_dish_not_in_message(db, sample_data):
 
 
 async def test_clear_cart_requires_explicit_words(db, sample_data):
-    """清空购物车：动作词+对象缺一不可"""
+    """清空购物车：整句必须恰好是"清空购物车"五个字，其余表述一律拒绝"""
     cart = [{"menu_item_id": 1, "name": "宫保鸡丁", "quantity": 1, "unit_price": 38.0}]
 
-    ctx = make_ctx(db, 1, list(cart), message="都不要了")
-    result = await _get_tool(ctx, "clear_cart").ainvoke({})
-    assert "未执行任何操作" in result and len(ctx.cart) == 1
+    for msg in ("都不要了", "把购物车清空", "清了购物车的东西"):
+        ctx = make_ctx(db, 1, list(cart), message=msg)
+        result = await _get_tool(ctx, "clear_cart").ainvoke({})
+        assert "还没有执行" in result and len(ctx.cart) == 1, msg
 
     ctx2 = make_ctx(db, 1, list(cart), message="清空购物车")
     result2 = await _get_tool(ctx2, "clear_cart").ainvoke({})
@@ -277,3 +291,58 @@ async def test_place_order_refuses_without_order_word(db, sample_data):
     result = await _get_tool(ctx, "place_order").ainvoke({})
     assert "未执行任何操作" in result
     assert len(ctx.cart) == 1
+
+
+# ------------------------------------------------------------
+# 合理简称：句中以简称提及、且简称 resolve 唯一命中 -> 放行
+# （传菜单全称或用户原始叫法均可；简称有歧义则维持拒绝）
+# ------------------------------------------------------------
+
+
+async def _add_watermelon_juice(db: AsyncSession) -> MenuItem:
+    item = MenuItem(name="鲜榨西瓜汁", price=18.0, category="饮品", stock=50, is_recommended=0)
+    db.add(item)
+    await db.commit()
+    return item
+
+
+async def test_add_tool_allows_fullname_when_message_has_unique_alias(db, sample_data):
+    """用户说"西瓜汁"，LLM 经搜索传菜单全称"鲜榨西瓜汁" -> 简称唯一指向，放行"""
+    await _add_watermelon_juice(db)
+    ctx = make_ctx(db, 1, message="我要一份西瓜汁，请问你们的营业时间是")
+    tool = _get_tool(ctx, "add_to_cart")
+    result = await tool.ainvoke({"dish_name": "鲜榨西瓜汁", "quantity": 1})
+    assert "已加入 1 份鲜榨西瓜汁" in result
+    assert ctx.cart and ctx.cart[0]["name"] == "鲜榨西瓜汁"
+
+
+async def test_add_tool_allows_raw_alias(db, sample_data):
+    """LLM 直接传用户原始叫法"西瓜汁" -> 字面命中，放行并落到菜单全称"""
+    await _add_watermelon_juice(db)
+    ctx = make_ctx(db, 1, message="我要一份西瓜汁，请问你们的营业时间是")
+    tool = _get_tool(ctx, "add_to_cart")
+    result = await tool.ainvoke({"dish_name": "西瓜汁", "quantity": 1})
+    assert "已加入 1 份鲜榨西瓜汁" in result
+
+
+async def test_add_tool_refuses_ambiguous_alias(db, sample_data):
+    """句中简称存在歧义（"西瓜"同时命中西瓜汁/西瓜露）-> 不构成依据，维持拒绝"""
+    await _add_watermelon_juice(db)
+    db.add(MenuItem(name="冰镇西瓜露", price=16.0, category="饮品", stock=50, is_recommended=0))
+    await db.commit()
+    ctx = make_ctx(db, 1, message="我要一份西瓜")
+    tool = _get_tool(ctx, "add_to_cart")
+    result = await tool.ainvoke({"dish_name": "鲜榨西瓜汁", "quantity": 1})
+    assert "未执行任何操作" in result
+    assert ctx.cart == []
+
+
+async def test_remove_tool_allows_unique_alias(db, sample_data):
+    """移除：用户说"把西瓜汁去掉"，"鲜榨西瓜汁"是唯一指向 -> 放行"""
+    juice = await _add_watermelon_juice(db)
+    cart = [{"menu_item_id": juice.id, "name": "鲜榨西瓜汁", "quantity": 1, "unit_price": 18.0}]
+    ctx = make_ctx(db, 1, cart, message="把西瓜汁去掉")
+    tool = _get_tool(ctx, "remove_from_cart")
+    result = await tool.ainvoke({"dish_name": "鲜榨西瓜汁"})
+    assert "已将" in result and "鲜榨西瓜汁" in result
+    assert ctx.cart == []

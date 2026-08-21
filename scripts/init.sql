@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `need_change_password` TINYINT(1) DEFAULT 0 COMMENT '是否需要强制修改密码',
     `face_encoding` JSON DEFAULT NULL COMMENT '人脸特征向量（128维）',
     `face_image_url` VARCHAR(255) DEFAULT NULL COMMENT '人脸照片URL',
-    `chat_quota` INT NOT NULL DEFAULT 100 COMMENT '智能聊天剩余次数（普通用户初始100）',
+    `chat_quota` INT NOT NULL DEFAULT 30 COMMENT '智能聊天剩余次数（普通用户初始30）',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
